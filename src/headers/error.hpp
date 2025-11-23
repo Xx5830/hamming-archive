@@ -10,9 +10,9 @@ class Error {
     const char *error;
 
   public:
-    Error(const char *text) { error = text; }
-    bool IsError() const { return error == nullptr; }
-    const char *GetError() { return error; }
+    Error(const char *text);
+    bool IsError() const; 
+    const char *GetError();
 };
 
 template <typename T>
@@ -25,8 +25,8 @@ template <typename T> requires moveable<T> class OptionError : public Error {
     OptionError() = delete;
     OptionError(const OptionError &other) = delete;
   public:
-    OptionError(T &&value, const char *text) : Error::error(text), value(std::move(value)){} 
-    T GetValue() { return value; }
+    OptionError(T &&value, const char *text) : Error::error(text), value(std::move(value));
+    T GetValue();
 };
 
 } // namespace error
