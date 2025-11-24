@@ -1,0 +1,216 @@
+#include "manager_files.hpp";
+
+size_t managefile::Hamarc::GetPosFinishName(std::string name, size_t startpos) {
+    size_t pos = buff_size;
+    for (uint32_t index = startpos; index < name.size(); index++){
+        if (name[index] == static_cast<char>(0) || name[index] == '|'){
+            pos = index;
+            break;
+        }
+    }
+
+    return pos;
+}
+void managefile::Hamarc::NormalBlock(std::string &str) const {
+    while (str.size() < buff_size) {
+        str += static_cast<char>(0);
+    }
+}
+
+std::vector<int> managefile::Hamarc::GetCountabilityInfo(std::string data, size_t size_prefix) const {
+    std::vector <int> table(8, 0);
+    size_t p = 0;
+    for (size_t index = 0; index < size_prefix && index < buff_size; index++) {
+        for (size_t bit = 0; bit < 8; bit++) {
+            size_t pos = index * 8 + bit + p;
+            while (pos == (1 << p)) {
+                ++p;
+                ++pos;
+            }
+
+            if (data[index] & (1 << bit)) {
+                for (size_t bit2 = 0; bit2 < 8; bit2++) {
+                    if (pos & (1 << bit2)) {
+                        table[bit2] = 1 - table[bit2];
+                    }
+                }
+            }
+        }
+    }
+
+    return table;
+}
+
+std::string managefile::Hamarc::DecodeBuff(const std::string &buff, size_t size_prefix) {
+    std::string current = buff.substr(0, size_prefix);
+
+    uint32_t value = buff.back();
+    std::vector <int> table(8, 0);
+    for (size_t bit = 0; bit < 8; bit++){
+        table[bit] = value & 1;
+        value >>= 1;
+    }
+    std::vector <int> another_table = GetCountabilityInfo(current, current.size());
+
+    uint32_t result = 0;
+    uint32_t cnt_diff = 0;
+    uint32_t last_bit = 0;
+    for (size_t index = 0; index < 8; index++){
+        if (table[index] != another_table[index]){
+            result |= 1 << index;
+            ++cnt_diff;
+            last_bit = index;
+        }
+    }
+
+    if (cnt_diff > 1){
+        result -= cnt_diff;
+
+        size_t num_byte = result / 8;
+        size_t ost = result % 8;
+        current[num_byte] ^= 1 << ost;
+    }
+
+    return current;
+}
+
+void managefile::Hamarc::EncodeBlock(std::string &str) const {
+    NormalBlock(str);
+
+    std::vector <int> table = GetCountabilityInfo(str, str.size());
+
+    uint32_t cu = 0;
+    for (uint32_t index = 0; index < 8; index++){
+        cu <<= 1;
+        cu += table[index];
+    }
+    str += std::to_string(cu);
+}
+
+managefile::File managefile::Hamarc::EncodeFile(const File &file) {
+    File tmp_file(file.GetName(), "tmp", true);
+    std::string short_name = file.GetName();
+    short_name += "." + file.GetFormat();
+
+    EncodeBlock(short_name);
+    tmp_file.PushBack(short_name, short_name.size());
+
+    size_t file_size = File::GetSize();
+    size_t cnt_block = file_size / cnt_block_size + (file_size % cnt_block_size != 0 ? 1 : 0);
+    long long ost_pos = file_size - file_size / cnt_block_size * cnt_block_size;
+
+    std::string cnt_block_str = std::to_string(cnt_block) + "|" + std::to_string(ost_pos);
+    EncodeBlock(cnt_block_str);
+    tmp_file.PushBack(cnt_block_str, cnt_block_str.size());
+
+    SetPos(0);
+    for (uint32_t index = 0; index < cnt_block; index++) {
+        std::string current_str;
+        current_str = GetCurrentData(buff_size);
+
+        EncodeBlock(current_str);
+        tmp_file.PushBack(current_str, current_str.size());
+    }
+
+    return tmp_file;
+}
+
+managefile::Hamarc::Hamarc(std::string name) : Archive(name, "haf") {}
+
+long long managefile::Hamarc::GetPosFile(std::string name) {
+    SetPos(0);
+    while (!IsEOF()) {
+        std::string current = GetCurrentData(chunk_size);
+        current = DecodeBuff(current, GetPosFinishName(current));
+
+        if (current == name) {
+            return GetPos() - chunk_size;
+        }
+
+        std::string cnt_block_str = GetCurrentData(chunk_size);
+        cnt_block_str = DecodeBuff(cnt_block_str, GetPosFinishName(cnt_block_str));
+        size_t cnt_block = atoll(cnt_block_str.c_str());
+        size_t cnt_symbol = cnt_block * chunk_size;
+
+        NextPos(cnt_symbol);
+    }
+
+    return -1;
+}
+
+void managefile::Hamarc::AddFile(File &file) {
+    File tmp_file = EncodeFile(file);
+    PushBack(tmp_file);
+}
+
+bool managefile::Hamarc::DeleteFile(const std::string &name) {
+    long long pos = GetPosFile(name);
+
+    if (pos == -1) {
+        return false;
+    }
+    std::string count_block_str = GetCurrentData(chunk_size);
+    count_block_str = DecodeBuff(count_block_str, GetPosFinishName(count_block_str));
+    long long count_block = atoll(count_block_str.c_str());
+    long long size_delete_field = count_block * chunk_size;
+    DeletePos(pos, size_delete_field);
+
+    return true;
+}
+
+std::vector<std::pair<std::string, long long>> managefile::Hamarc::GetInfo() {
+    SetPos(0);
+
+    std::vector<std::pair<std::string, long long>> result;
+    while (!IsEOF()){
+        std::string current = GetCurrentData(chunk_size);
+        current = DecodeBuff(current, GetPosFinishName(current));
+        std::string count_block_str = GetCurrentData(chunk_size);
+        count_block_str = DecodeBuff(count_block_str, GetPosFinishName(count_block_str));
+        long long count_block = atoll(count_block_str.c_str());
+
+        result.push_back({current, count_block});
+
+        NextPos(count_block * chunk_size);
+    }
+
+    return result;
+}
+
+bool managefile::Hamarc::Extract(const std::string &name) {
+    long long pos = GetPosFile(name);
+
+    if (pos == -1){
+        return false;
+    }
+
+    std::string file_name = GetCurrentData(chunk_size);
+    file_name = DecodeBuff(file_name, GetPosFinishName(file_name));
+
+    std::string count_block_str = GetCurrentData(chunk_size);
+    size_t pos_finish = GetPosFinishName(count_block_str);
+    std::string ost_str = DecodeBuff(count_block_str, GetPosFinishName(count_block_str, pos_finish + 1));
+    count_block_str = DecodeBuff(count_block_str, pos_finish);
+    long long count_block = atoll(count_block_str.c_str());
+    long long ost = atoll(ost_str.c_str());
+
+    File now_file(file_name);
+
+    for (uint64_t index_block = 0; index_block < count_block; index_block++){
+        std::string data = GetCurrentData(chunk_size);
+        if (index_block + 1 < count_block){
+            data = DecodeBuff(data, name_size);
+        }
+        else{
+            data = DecodeBuff(data, ost);
+        }
+
+        now_file.PushBack(data, data.size());
+    }
+
+    return true;
+}
+
+void managefile::Hamarc::Merge(Hamarc &other) {
+    AddFile(other);
+}

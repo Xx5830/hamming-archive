@@ -1,34 +1,49 @@
 #include <argparser.hpp>
 
-/* template <typename T> argparser::Argument<T> &argparser::Argument<T>::operator=(const Argument &other) {
-    short_name = other.short_name;
-    long_name = other.long_name;
-    pos_name = other.pos_name;
+std::string argparser::Parser::GetString(char *arr) {
+    std::string cu;
+    for (size_t index = 0; arr[index] != '\0'; index++){
+        cu += arr[index];
+    }
 
-    flag = other.flag;
-    data = other.data;
-
-    return *this;
+    return cu;
 }
 
-template <typename T> argparser::Argument<T>::Argument(const Argument &other) { *this = other; }
+void argparser::Parser::Parse(size_t argc, char **argv) {
+    for (size_t index = 1; index < argc; index++){
+        std::string cu = GetString(argv[index]);
 
-template <typename T>
-argparser::Argument<T>::Argument(const ShortName &short_name, const LongName &long_name, const PosName &pos_name,
-                                 const Counting &many, bool *flag) {
-    this->short_name = std::move(short_name.name);
-    this->long_name = std::move(long_name.name);
-    this->pos_name = std::move(pos_name.name);
-    this->many = many;
-    this->flag = flag;
+        if (cu == "-c" || cu == "--create"){
+            create = true;
+        }
+        else if (cu == "-f" || cu == "--file"){
+            archive = GetString(argv[index + 1]);
+        }
+        else if ((cu.size() > 7 && cu.substr(0, 7) == "--file=")){
+            archive = cu.substr(7, cu.size() - 7);
+        }
+        else if (cu == "-l" || cu == "--list"){
+            list = true;
+        }
+        else if (cu == "-x" || cu == "--extract"){
+            extract = true;
+        }
+        else if (cu == "-a" || cu == "--append"){
+            insert = true;
+        }
+        else if (cu == "-d" || cu == "--delete"){
+            erase = true;
+        }
+        else if (cu == "-A" || cu == "--concatenate"){
+            concatenate = true;
+        }
+        else{
+            if (cu.size() > 3 && cu.substr(cu.size() - 3, 3) == ".haf"){
+                archives.push_back(cu);
+            }
+            else{
+                files.push_back(cu);
+            }
+        }
+    }
 }
-
-template <typename T> void argparser::Argument<T>::AddData(const T &element) { memory.PushBack(element); }
-
-template <typename T>
-void argparser::ArgParser<T>::Add(const argparser::Argument<T>::ShortName &short_name,
-                                  const argparser::Argument<T>::LongName &long_name,
-                                  const argparser::Argument<T>::PosName &pos_name,
-                                  const argparser::Argument<T>::Counting &many, bool *flag) {}
- */
-
