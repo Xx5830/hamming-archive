@@ -1,12 +1,25 @@
 //#include "manager_files.hpp"
 #include "headers/manager_files.hpp"
+#include <sys/stat.h>
 
 void managefile::File::Open(std::string name) {
-    if (!std::filesystem::exists(fully_name)){
-        std::ofstream cur = std::ofstream(fully_name, std::ios::out);
+    if (!std::filesystem::exists(name)){
+        std::string path;
+        size_t size_path = 0;
+        for (uint32_t index = 0; index < name.size(); index++){
+            if (name[index] == '/'){
+                size_path = index;
+            }
+        }
+        path = name.substr(0, size_path);
+        if (size_path != 0){
+            std::filesystem::create_directories(path);
+        }
+        //mkdir(fully_name);
+        std::ofstream cur = std::ofstream(name, std::ios::out);
         cur.close();
     }
-    stream = std::fstream{fully_name, std::ios::in | std::ios::out | std::ios::binary};
+    stream = std::fstream{name, std::ios::in | std::ios::out | std::ios::binary};
 }
 
 void managefile::File::OpenWithApp(std::string name) {

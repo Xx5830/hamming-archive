@@ -19,7 +19,7 @@ int main(int argc, char *argv[]) {
     }
     managefile::Hamarc my_archive(parser.archive);
 
-    if (parser.insert) {
+    if (parser.insert || parser.create) {
         for (uint32_t index = 0; index < parser.files.size(); index++) {
             std::string file_name = parser.files[index];
             managefile::File file(file_name);
@@ -50,6 +50,10 @@ int main(int argc, char *argv[]) {
 			if (!result){
 				std::cout << "archive hasn't file with name: " << file_name << std::endl;
 			}
+        }
+
+        if (parser.files.size() == 0){
+            my_archive.ExtractAll();
         }
     }
     if (parser.erase) {

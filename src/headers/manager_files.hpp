@@ -125,6 +125,8 @@ class Hamarc : public Archive {
 
     bool Extract(const std::string &name);
 
+    void ExtractAll();
+
     void Merge(Hamarc &other);
 };
 
