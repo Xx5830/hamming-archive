@@ -1,9 +1,9 @@
-#include "argparser.hpp"
-#include "manager_files.hpp"
+#include "headers/argparser.hpp"
+#include "headers/manager_files.hpp"
 #include <filesystem>
 #include <iostream>
 
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
     argparser::Parser parser;
     parser.Parse(argc, argv);
 

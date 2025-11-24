@@ -41,7 +41,7 @@ format:
 
 class File {
   protected:
-    static const size_t def_buffer_size = 0;
+    static const size_t def_buffer_size = 256;
     std::string name;
     std::string suffix_name;
     std::fstream stream;
@@ -87,6 +87,7 @@ class File {
 class Archive : public File {
   public:
     inline Archive(std::string name, std::string suff_name) : File(name, suff_name) {}
+    inline Archive(std::string fully_name) : File(fully_name){}
     virtual void AddFile(File &file) = 0;
     virtual bool DeleteFile(const std::string &name) = 0;
     ~Archive() = default;
@@ -103,13 +104,13 @@ class Hamarc : public Archive {
 
     void NormalBlock(std::string &str) const;
     
-    std::vector<int> GetCountabilityInfo(std::string data, size_t size_prefix) const;
+    uint32_t GetCountabilityInfo(std::string data, size_t size_prefix) const;
     
     std::string DecodeBuff(const std::string &buff, size_t size_prefix);
 
-    void EncodeBlock(std::string &str) const;
+    void EncodeBlock(std::string &str, size_t size_codec) const;
 
-    File EncodeFile(const File &file);
+    File EncodeFile(File &file);
 
   public:
     Hamarc(std::string name);

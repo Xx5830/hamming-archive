@@ -1,4 +1,5 @@
-#include <argparser.hpp>
+//#include "argparser.hpp"
+#include "headers/argparser.hpp"
 
 std::string argparser::Parser::GetString(char *arr) {
     std::string cu;
@@ -18,6 +19,7 @@ void argparser::Parser::Parse(size_t argc, char **argv) {
         }
         else if (cu == "-f" || cu == "--file"){
             archive = GetString(argv[index + 1]);
+            ++index;
         }
         else if ((cu.size() > 7 && cu.substr(0, 7) == "--file=")){
             archive = cu.substr(7, cu.size() - 7);

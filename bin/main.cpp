@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
     if (parser.concatenate) {
         for (uint32_t index = 0; index < parser.archives.size(); index++) {
             std::string archive_name = parser.archives[index];
-            managefile::Archive file(archive_name);
+            managefile::Hamarc file(archive_name);
 
             if (std::filesystem::exists(archive_name)) {
                 my_archive.Merge(file);

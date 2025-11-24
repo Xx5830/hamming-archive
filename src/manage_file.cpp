@@ -1,4 +1,5 @@
-#include "manager_files.hpp";
+//#include "manager_files.hpp"
+#include "headers/manager_files.hpp"
 
 void managefile::File::Open(std::string name) {
     if (!std::filesystem::exists(fully_name)){
@@ -45,7 +46,7 @@ managefile::File::File(std::string fully_name, bool is_tmp) {
 
     this->name = name;
     this->suffix_name = suffix_name;
-    this->fully_name = this->name + "." + this->suffix_name;
+    this->fully_name = fully_name;
     this->is_tmp = is_tmp;
 
     Open(fully_name);
@@ -127,7 +128,7 @@ void managefile::File::SetPos(size_t index)  {
     stream.seekg(index, std::ios::beg);
 }
 
-void managefile::File::NextPos(size_t next_pos) { SetPos(GetPos() + next_pos); }
+void managefile::File::NextPos(size_t next_pos) { SetPos(static_cast<size_t>(GetPos()) + next_pos); }
 
 void managefile::File::Replace(size_t pos, const std::string &str, size_t size_replace) {
     if (stream.eof()) {
