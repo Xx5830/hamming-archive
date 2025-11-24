@@ -1,5 +1,5 @@
-#include "argparser.hpp"
-#include "manager_files.hpp"
+#include "../src/headers/argparser.hpp"
+#include "../src/headers/manager_files.hpp"
 #include <filesystem>
 #include <iostream>
 
