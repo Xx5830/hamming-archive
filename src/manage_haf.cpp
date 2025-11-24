@@ -238,8 +238,7 @@ void managefile::Hamarc::ExtractAll() {
         if (index == 0) {
             Extract(current);
         } else {
-            std::string file_name = GetCurrentData(chunk_size);
-            file_name = DecodeBuff(file_name, GetPosFinishName(file_name));
+            std::string file_name = current;
 
             std::string count_block_str = GetCurrentData(chunk_size);
             size_t pos_finish = GetPosFinishName(count_block_str);
