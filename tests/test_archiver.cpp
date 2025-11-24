@@ -124,6 +124,6 @@ TEST(HamArcCLI, CreateAndExtractAndCompare) {
 	ASSERT_TRUE(fs::exists(extr1));
 	ASSERT_TRUE(fs::exists(extr2));
 
-	/* EXPECT_TRUE(filesEqual(file1, extr1));
-	EXPECT_TRUE(filesEqual(file2, extr2)); */
+	EXPECT_TRUE(filesEqual(file1, extr1));
+	EXPECT_TRUE(filesEqual(file2, extr2));
 }
