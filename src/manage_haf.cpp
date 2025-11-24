@@ -41,7 +41,7 @@ uint32_t managefile::Hamarc::GetCountabilityInfo(std::string data, size_t size_p
     }
 
     uint32_t cu = 0;
-    for (uint32_t index = 0; index < 8; index++){
+    for (int32_t index = 7; index >= 0; index--){
         cu <<= 1;
         cu += table[index];
     }
@@ -68,7 +68,12 @@ std::string managefile::Hamarc::DecodeBuff(const std::string &buff, size_t size_
     }
 
     if (cnt_diff > 1){
-        result -= cnt_diff;
+        uint32_t p = 0;
+        while (result >= (1 << (p + 1))){
+            ++p;
+        }
+        result -= p + 1;
+        --result;
 
         size_t num_byte = result / 8;
         size_t ost = result % 8;
