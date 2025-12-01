@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
     }
     if (parser.erase) {
         for (uint32_t index = 0; index < parser.files.size(); index++) {
-            std::string file_name = parser.files[index];
+            std::string file_name = parser.files[index];;
             my_archive.Delete(file_name);
         }
     }
