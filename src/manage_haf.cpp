@@ -23,7 +23,7 @@ managefile::Hamarc::EncodingInfo::EncodingInfo(std::span<char> arr) {
     size_t count_bit = 0;
     size_t count_copy = 0;
 
-    for (size_t index = 0; index < 7; index++){
+    for (size_t index = 0; index < 7; index++) {
         count_bit += static_cast<uint64_t>(arr[index]) << (48 - index * 8);
     }
     count_copy = arr[7];
@@ -55,29 +55,26 @@ managefile::Hamarc::ConfigEncodingFile::ConfigEncodingFile(EncodingInfo size_fil
       encoding_data_file(encoding_data_file) {}
 
 managefile::Hamarc::ConfigEncodingFile::ConfigEncodingFile(const std::span<char> &arr) {
-    for (size_t start_index = 0; start_index < arr.size(); start_index += 8){
+    for (size_t start_index = 0; start_index < arr.size(); start_index += 8) {
         char current[8];
-        for (size_t index = start_index; index < start_index + 8; index++){
+        for (size_t index = start_index; index < start_index + 8; index++) {
             current[index - start_index] = arr[index];
         }
 
-        if (start_index == 0){
+        if (start_index == 0) {
             size_file = EncodingInfo(current);
-        }
-        else if (start_index == 8){
+        } else if (start_index == 8) {
             size_name_file = EncodingInfo(current);
-        }
-        else if (start_index == 16){
+        } else if (start_index == 16) {
             name_file = EncodingInfo(current);
-        }
-        else if (start_index == 24){
+        } else if (start_index == 24) {
             encoding_data_file = EncodingInfo(current);
         }
     }
 }
 
-managefile::Hamarc::Hat::Hat(std::span<char> size_file, std::span<char> size_name_file,
-                              std::span<char> name_file,  std::span<char> encoding_data_file) {
+managefile::Hamarc::Hat::Hat(std::span<char> size_file, std::span<char> size_name_file, std::span<char> name_file,
+                             std::span<char> encoding_data_file) {
     this->size_file = 0;
     for (size_t index = 0; index < size_file.size(); index++) {
         size_t shift = ((size_file.size() - index - 1) * 8);
@@ -111,8 +108,8 @@ managefile::Hamarc::Hat::Hat() {}
 
 std::vector<char> managefile::Hamarc::IntegralToVectorCHar(long long num, size_t count_byte) const {
     std::vector<char> result;
-    
-    while(result.size() < count_byte) {
+
+    while (result.size() < count_byte) {
         result.push_back(static_cast<char>(num & 0b11111111));
         num >>= 8;
     }
@@ -120,7 +117,7 @@ std::vector<char> managefile::Hamarc::IntegralToVectorCHar(long long num, size_t
     std::reverse(result.begin(), result.end());
 
     return result;
-  }
+}
 
 std::vector<uint8_t> managefile::Hamarc::HemmingBytes(const std::span<char> data,
                                                       const EncodingInfo &encoding_info) const {
@@ -197,11 +194,10 @@ std::vector<char> managefile::Hamarc::EncodeBlock(const std::span<char> block,
              bit_result++, index_hemming_bit++) {
             uint8_t bit = hemming_bytes[index_hemming_bit / 8] & (1 << (index_hemming_bit % 8));
 
-            if (index_hemming_bit % 8 >= bit_result){
+            if (index_hemming_bit % 8 >= bit_result) {
                 uint8_t shift = (index_hemming_bit % 8) - bit_result;
                 result.back() |= bit >> shift;
-            }
-            else{
+            } else {
                 uint8_t shift = bit_result - (index_hemming_bit % 8);
                 result.back() |= bit << shift;
             }
@@ -257,24 +253,22 @@ std::vector<char> managefile::Hamarc::EncodeData(const std::span<char> data, con
     };
     std::vector<char> result;
 
-
     ReadMachine read_machine(encoding_info.count_data_bits);
 
     read_machine.Read(data);
     std::vector<std::vector<char>> blocks = read_machine.GetResult();
 
     while (blocks.back().size() != encoding_info.count_data_bytes) {
-            blocks.back().push_back(static_cast<char>(0));
-        }
+        blocks.back().push_back(static_cast<char>(0));
+    }
 
     for (size_t index = 0; index < blocks.size(); index++) {
-            std::vector<char> encode_block = EncodeBlock(blocks[index], encoding_info);
+        std::vector<char> encode_block = EncodeBlock(blocks[index], encoding_info);
 
-            for (size_t index = 0; index < encode_block.size(); index++) {
-                result.push_back(encode_block[index]);
-            }
+        for (size_t index = 0; index < encode_block.size(); index++) {
+            result.push_back(encode_block[index]);
         }
-    
+    }
 
     return result;
 }
@@ -295,18 +289,18 @@ std::vector<char> managefile::Hamarc::EncodeHat(Hat hat) const {
     std::vector<char> encoding_data_file = IntegralToVectorCHar(hat.encoding_data_file, 8);
     std::vector<char> encoded_encoding_data_file = EncodeData(encoding_data_file, config.encoding_data_file);
 
-    std::vector <char> result;
+    std::vector<char> result;
 
-    for (size_t index = 0; index < encoded_size_file.size(); index++){
+    for (size_t index = 0; index < encoded_size_file.size(); index++) {
         result.push_back(encoded_size_file[index]);
     }
-    for (size_t index = 0; index < encoded_size_name_file.size(); index++){
+    for (size_t index = 0; index < encoded_size_name_file.size(); index++) {
         result.push_back(encoded_size_name_file[index]);
     }
-    for (size_t index = 0; index < encoded_name_file.size(); index++){
+    for (size_t index = 0; index < encoded_name_file.size(); index++) {
         result.push_back(encoded_name_file[index]);
     }
-    for (size_t index = 0; index < encoded_encoding_data_file.size(); index++){
+    for (size_t index = 0; index < encoded_encoding_data_file.size(); index++) {
         result.push_back(encoded_encoding_data_file[index]);
     }
 
@@ -346,7 +340,7 @@ managefile::File managefile::Hamarc::EncodeFile(File &file, const EncodingInfo &
         std::vector<char> encoded_data = EncodeData(buff, encoding_data);
         tmp_file.Write(encoded_data);
     }
-    if (file.Length() % buff_size != 0){
+    if (file.Length() % buff_size != 0) {
         std::vector<char> buff;
         buff = file.Read(buff_size);
 
@@ -371,27 +365,29 @@ std::vector<char> managefile::Hamarc::DecodeBlock(const std::span<char> block,
         for (size_t index_bit = 0; index_bit < encoding_info.count_data_bits % 8; index_bit++) {
             data[data.size() - 1] |= block[data.size() - 1] & (1 << index_bit);
         }
-        
+
         hemming_bytes1.push_back(0);
-        for (size_t index_bit = encoding_info.count_data_bits % 8; index_bit < 8 && index_hemming_bit1 < encoding_info.count_hemming_bits; index_bit++, index_hemming_bit1++){
+        for (size_t index_bit = encoding_info.count_data_bits % 8;
+             index_bit < 8 && index_hemming_bit1 < encoding_info.count_hemming_bits;
+             index_bit++, index_hemming_bit1++) {
             size_t bit = block[data.size() - 1] & (1 << index_bit);
             size_t shift = index_bit - index_hemming_bit1;
             hemming_bytes1.back() |= bit >> shift;
         }
     }
     for (size_t index = data.size(); index < block.size(); index++) {
-        for (size_t index_bit = 0; index_bit < 8 && index_hemming_bit1 < encoding_info.count_hemming_bits; index_bit++, index_hemming_bit1++){
+        for (size_t index_bit = 0; index_bit < 8 && index_hemming_bit1 < encoding_info.count_hemming_bits;
+             index_bit++, index_hemming_bit1++) {
             size_t bit = block[index] & (1 << index_bit);
-            
-            if (hemming_bytes1.size() * 8 <= index_hemming_bit1){
+
+            if (hemming_bytes1.size() * 8 <= index_hemming_bit1) {
                 hemming_bytes1.push_back(0);
             }
-            
-            if (index_hemming_bit1 % 8 > index_bit){
+
+            if (index_hemming_bit1 % 8 > index_bit) {
                 size_t shift = (index_hemming_bit1 % 8) - index_bit;
                 hemming_bytes1.back() |= bit << shift;
-            }
-            else{
+            } else {
                 size_t shift = index_bit - (index_hemming_bit1 % 8);
                 hemming_bytes1.back() |= bit >> shift;
             }
@@ -470,8 +466,7 @@ std::vector<char> managefile::Hamarc::DecodeData(std::span<char> data, const Enc
                         }
 
                         current_count_let = 1;
-                    }
-                    else{
+                    } else {
                         ++current_count_let;
                     }
                 }
@@ -506,7 +501,7 @@ std::vector<char> managefile::Hamarc::DecodePosBlock(size_t pos, const EncodingI
     return encoded_data;
 }
 
-//improve const size block in hat
+// improve const size block in hat
 managefile::Hamarc::Hat managefile::Hamarc::DecodeHat(const size_t pos) {
     file.SetPos(pos);
 
@@ -515,10 +510,12 @@ managefile::Hamarc::Hat managefile::Hamarc::DecodeHat(const size_t pos) {
     std::vector<char> name_file;
     std::vector<char> encoding_data_file;
 
-    std::vector <char> encoded_size_file = file.Read(8 * (config.size_file.count_data_bytes + config.size_file.count_additional_bytes));
+    std::vector<char> encoded_size_file =
+        file.Read(8 * (config.size_file.count_data_bytes + config.size_file.count_additional_bytes));
     size_file = DecodeData(encoded_size_file, config.size_file);
 
-    std::vector <char> encoded_size_name_file = file.Read(4 * (config.size_name_file.count_data_bytes + config.size_name_file.count_additional_bytes));
+    std::vector<char> encoded_size_name_file =
+        file.Read(4 * (config.size_name_file.count_data_bytes + config.size_name_file.count_additional_bytes));
     size_name_file = DecodeData(encoded_size_name_file, config.size_name_file);
     uint32_t usize_name = 0;
     usize_name += static_cast<uint32_t>(size_name_file[0]) << 24;
@@ -526,10 +523,12 @@ managefile::Hamarc::Hat managefile::Hamarc::DecodeHat(const size_t pos) {
     usize_name += static_cast<uint32_t>(size_name_file[2]) << 8;
     usize_name += static_cast<uint32_t>(size_name_file[3]) << 0;
 
-    std::vector <char> encoded_name_file = file.Read(usize_name * (config.name_file.count_data_bytes + config.name_file.count_additional_bytes));
+    std::vector<char> encoded_name_file =
+        file.Read(usize_name * (config.name_file.count_data_bytes + config.name_file.count_additional_bytes));
     name_file = DecodeData(encoded_name_file, config.name_file);
 
-    std::vector<char> encoded_encoding_data_file = file.Read(8 * (config.encoding_data_file.count_data_bytes + config.encoding_data_file.count_additional_bytes));
+    std::vector<char> encoded_encoding_data_file =
+        file.Read(8 * (config.encoding_data_file.count_data_bytes + config.encoding_data_file.count_additional_bytes));
     encoding_data_file = DecodeData(encoded_encoding_data_file, config.encoding_data_file);
 
     Hat result_hat(size_file, size_name_file, name_file, encoding_data_file);
@@ -546,7 +545,6 @@ managefile::File managefile::Hamarc::DecodeFile(size_t pos, const Hat &hat, size
     size_t size_block =
         (encoding_data.count_data_bytes + encoding_data.count_additional_bytes) * encoding_data.count_copy;
 
-
     buff_size = buff_size / size_block * size_block;
     size_t size_file = GetSizeFile(hat);
     size_t count_reading = size_file / buff_size;
@@ -562,11 +560,12 @@ managefile::File managefile::Hamarc::DecodeFile(size_t pos, const Hat &hat, size
     size_t ost_bytes = count_reading * buff_size;
     ost_bytes = size_file - ost_bytes;
 
-    std::vector <char> buff;
+    std::vector<char> buff;
     buff = file.Read(ost_bytes);
-    std::vector <char> decoded_buff = DecodeData(buff,encoding_data);
-    
-    size_t ost_byte = (ost_bytes / size_block - 1) * encoding_data.count_data_bytes + (hat.size_file % encoding_data.count_data_bytes);
+    std::vector<char> decoded_buff = DecodeData(buff, encoding_data);
+
+    size_t ost_byte = (ost_bytes / size_block - 1) * encoding_data.count_data_bytes +
+                      (hat.size_file % encoding_data.count_data_bytes);
     decoded_buff.resize(ost_byte);
 
     tmp_file.PushBack(decoded_buff);
@@ -580,7 +579,7 @@ size_t managefile::Hamarc::GetSizeFile(const Hat &hat) const {
     size_t size_block =
         (encoding_data.count_data_bytes + encoding_data.count_additional_bytes) * encoding_data.count_copy;
     size_t count_block = (hat.size_file * 8) / encoding_data.count_data_bits;
-    if ((hat.size_file * 8) % encoding_data.count_data_bits != 0){
+    if ((hat.size_file * 8) % encoding_data.count_data_bits != 0) {
         ++count_block;
     }
 
@@ -592,13 +591,13 @@ size_t managefile::Hamarc::GetSizeFile(const Hat &hat) const {
 size_t managefile::Hamarc::GetPosFirstFile() { return begin_file_pos; }
 
 managefile::Hamarc::Hamarc(const std::string &file_path, bool create_if_not_exist, const ConfigEncodingFile &config) {
-    if (std::filesystem::exists(file_path) && std::filesystem::file_size(file_path) > 0){
+    if (std::filesystem::exists(file_path) && std::filesystem::file_size(file_path) > 0) {
         file = File(file_path, create_if_not_exist);
 
-        std::vector <std::vector <char>> copies(count_copy_hat_archive);
-        std::vector <char> config_archive(32);
+        std::vector<std::vector<char>> copies(count_copy_hat_archive);
+        std::vector<char> config_archive(32);
         file.SetBegin();
-        for (size_t index_copy = 0; index_copy < copies.size(); index_copy++){
+        for (size_t index_copy = 0; index_copy < copies.size(); index_copy++) {
             copies[index_copy] = file.Read(32);
         }
 
@@ -622,8 +621,7 @@ managefile::Hamarc::Hamarc(const std::string &file_path, bool create_if_not_exis
                         }
 
                         current_count_let = 1;
-                    }
-                    else{
+                    } else {
                         ++current_count_let;
                     }
                 }
@@ -651,29 +649,28 @@ managefile::Hamarc::Hamarc(const std::string &file_path, bool create_if_not_exis
             file.MovePos(move_pos);
             current_pos = file.Pos();
         }
-    }
-    else{
+    } else {
         file = File(file_path, create_if_not_exist);
         this->config = config;
         count_file = 0;
 
-        std::vector <char> config_archive;
-        
+        std::vector<char> config_archive;
+
         config_archive = IntegralToVectorCHar(config.size_file.ToInt(), 8);
-        std::vector <char> current = IntegralToVectorCHar(config.size_name_file.ToInt(), 8);
-        for (size_t index = 0; index < current.size(); index++){
+        std::vector<char> current = IntegralToVectorCHar(config.size_name_file.ToInt(), 8);
+        for (size_t index = 0; index < current.size(); index++) {
             config_archive.push_back(current[index]);
         }
         current = IntegralToVectorCHar(config.name_file.ToInt(), 8);
-        for (size_t index = 0; index < current.size(); index++){
+        for (size_t index = 0; index < current.size(); index++) {
             config_archive.push_back(current[index]);
         }
         current = IntegralToVectorCHar(config.encoding_data_file.ToInt(), 8);
-        for (size_t index = 0; index < current.size(); index++){
+        for (size_t index = 0; index < current.size(); index++) {
             config_archive.push_back(current[index]);
         }
 
-        for (size_t index_copy = 0; index_copy < count_copy_hat_archive; index_copy++){
+        for (size_t index_copy = 0; index_copy < count_copy_hat_archive; index_copy++) {
             file.PushBack(config_archive);
         }
         begin_file_pos = file.Pos();
@@ -693,6 +690,10 @@ std::pair<managefile::File, bool> managefile::Hamarc::Get(const std::string &nam
 
             return {std::move(tmp_file), true};
         }
+
+        size_t size_file = GetSizeFile(hat);
+
+        file.MovePos(size_file);
     }
 
     return {std::move(tmp_file), false};
@@ -706,6 +707,10 @@ ssize_t managefile::Hamarc::GetPos(const std::string &name) {
         if (hat.name_file == name) {
             return start_file_pos;
         }
+
+        size_t size_file = GetSizeFile(hat);
+
+        file.MovePos(size_file);
     }
 
     return -1;
@@ -778,6 +783,13 @@ bool managefile::Hamarc::Merge(Hamarc &other) {
         }
 
         return true;
+    }
+    else{
+        std::vector<File> files = other.GetAll();
+
+        for (size_t index = 0; index > files.size(); index++){
+            Add(files[index]);
+        }
     }
 
     return false;
