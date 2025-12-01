@@ -1,4 +1,3 @@
-//#include "argparser.hpp"
 #include "headers/argparser.hpp"
 
 std::string argparser::Parser::GetString(char *arr) {

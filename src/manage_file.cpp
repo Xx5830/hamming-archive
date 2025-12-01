@@ -1,68 +1,54 @@
-//#include "manager_files.hpp"
 #include "headers/manager_files.hpp"
 #include <sys/stat.h>
 
-void managefile::File::Open(std::string name) {
-    if (!std::filesystem::exists(name)){
-        std::string path;
-        size_t size_path = 0;
-        for (uint32_t index = 0; index < name.size(); index++){
-            if (name[index] == '/'){
-                size_path = index;
-            }
+managefile::File::File() {}
+
+void managefile::File::Open(bool create_if_not_exists, bool need_clear_on_open) {
+    if (!std::filesystem::exists(FilePath()) && create_if_not_exists) {
+        if (Directories().size() != 0) {
+            std::filesystem::create_directories(Directories());
         }
-        path = name.substr(0, size_path);
-        if (size_path != 0){
-            std::filesystem::create_directories(path);
-        }
-        //mkdir(fully_name);
-        std::ofstream cur = std::ofstream(name, std::ios::out);
-        cur.close();
+
+        std::ofstream(FilePath(), std::ios::out).close();
     }
-    stream = std::fstream{name, std::ios::in | std::ios::out | std::ios::binary};
+
+    if (need_clear_on_open) {
+        stream = std::fstream{FilePath(), std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc};
+    } else {
+        stream = std::fstream{FilePath(), std::ios::in | std::ios::out | std::ios::binary};
+    }
 }
 
-void managefile::File::OpenWithApp(std::string name) {
-    if (!std::filesystem::exists(fully_name)){
-        std::ofstream cur = std::ofstream(fully_name, std::ios::out);
-        cur.close();
-    }
-    stream = std::fstream{fully_name, std::ios::in | std::ios::out | std::ios::binary | std::ios::app};
-}
+managefile::File::File(const std::string &file_path, bool create_if_not_exists, bool delete_on_close,
+                                bool need_clear_on_open) {
+    ssize_t pos_slash = -1;
+    ssize_t pos_point = -1;
 
-void managefile::File::TryOpen(std::string name) {
-    stream = std::fstream{fully_name, std::ios::in | std::ios::out | std::ios::binary};
-}
-
-managefile::File::File(std::string name, std::string suffix_name, bool is_tmp) :File(name + "." + suffix_name,is_tmp) {}
-
-managefile::File::File(std::string fully_name, bool is_tmp) {
-    int32_t index_point = 0;
-    int32_t index_finish_way = -1;
-    for (uint32_t index = 0; index < fully_name.size(); index++){
-        if (fully_name[index] == '.'){
-            index_point = index;
-            break;
-        }
-        else if (fully_name[index] == '/'){
-            index_finish_way = index;
+    for (size_t index = 0; index < file_path.size(); index++) {
+        if (file_path[index] == '/') {
+            pos_slash = index;
+        } else if (pos_point == -1 && file_path[index] == '.') {
+            pos_point = index;
         }
     }
 
-    std::string name, suffix_name;
-    for (uint32_t index = index_finish_way + 1; index < index_point; index++){
-        name += fully_name[index];
+    this->file_path = file_path;
+
+    if (pos_slash != -1) {
+        directories_path = file_path.substr(0, pos_slash);
     }
-    for (uint32_t index = index_point + 1; index < fully_name.size(); index++){
-        suffix_name += fully_name[index];
+    if (pos_point != -1) {
+        format = file_path.substr(pos_point + 1, file_path.size() - pos_point - 1);
     }
 
-    this->name = name;
-    this->suffix_name = suffix_name;
-    this->fully_name = fully_name;
-    this->is_tmp = is_tmp;
+    if (pos_point == -1) {
+        pos_point = file_path.size();
+    }
 
-    Open(fully_name);
+    name = file_path.substr(pos_slash + 1, pos_point - pos_slash - 1);
+
+    this->delete_on_close = delete_on_close;
+    Open(create_if_not_exists, need_clear_on_open);
 }
 
 managefile::File::File(File &&other) { *this = std::move(other); }
@@ -71,180 +57,197 @@ managefile::File &managefile::File::operator=(File &&other) {
     if (IsOpen()) {
         stream.close();
     }
-    if (other.IsOpen()) {
-        other.stream.close();
-    }
 
-    this->name = other.name;
-    this->suffix_name = other.suffix_name;
-    this->fully_name = other.fully_name;
-    Open(fully_name);
-    this->is_tmp = other.is_tmp;
-    other.is_tmp = 0;
+    this->file_path = std::move(other.file_path);
+    this->name = std::move(other.name);
+    this->directories_path = std::move(other.directories_path);
+    this->format = std::move(other.format);
+    stream = std::move(other.stream);
+    this->delete_on_close = other.delete_on_close;
+    other.delete_on_close = false;
 
     return *this;
 }
 
-void managefile::File::Close() {
-    stream.close();
-}
+void managefile::File::Close() { stream.close(); }
 
 bool managefile::File::IsOpen() const { return stream.is_open(); }
 
 bool managefile::File::IsEOF() const { return stream.eof(); }
 
-size_t managefile::File::GCount() const  { return stream.gcount(); }
+void managefile::File::ClearEOF() {stream.clear();}
 
-std::string managefile::File::GetName() const { return name; }
+std::string managefile::File::Name() const { return name; }
 
-std::string managefile::File::GetFullyName() const {return fully_name;}
+std::string managefile::File::Directories() const { return directories_path; }
 
-std::string managefile::File::GetLongName() const {
-    std::string name = GetFullyName();
-    uint32_t index_point = 0;
-    for (uint32_t index = 0; index < name.size(); index++){
-        if (name[index] == '.'){
-            index_point = index;
-            break;
-        }
+std::string managefile::File::Format() const { return format; }
+
+std::string managefile::File::FilePath() const { return file_path; }
+
+ssize_t managefile::File::Pos() { return stream.tellg(); }
+
+size_t managefile::File::GCount() const { return stream.gcount(); }
+
+size_t managefile::File::Length() const { return std::filesystem::file_size(FilePath()); }
+
+std::vector<char> managefile::File::Read(size_t read_size) {
+    std::vector <char> current(read_size);
+
+    if (read_size > 0){
+        stream.read(&current[0], read_size);
+        current.resize(GCount());
     }
-    
-    std::string long_name = name.substr(0, index_point);
-    return long_name;
-}
-
-std::string managefile::File::GetFormat() const { return suffix_name; }
-
-std::string managefile::File::GetData(size_t size_get, size_t pos) {
-    if (stream.eof()) {
-        stream.clear();
-    }
-
-    stream.seekg(pos, std::ios::beg);
-    std::string current(size_get, '0');
-    stream.read(&current[0], size_get);
     return current;
 }
 
-std::string managefile::File::GetCurrentData(size_t size_get) {
-    std::string current(size_get, '0');
-    stream.read(&current[0], size_get);
+std::vector<char> managefile::File::ReadPos(size_t pos, size_t read_size) {
+    SetPos(pos);
+    std::vector<char> current = Read(read_size);
     return current;
 }
 
-std::streampos managefile::File::GetPos() { return stream.tellg(); }
+void managefile::File::Write(const std::span<char> data) {
+    stream.write(&data[0], data.size());
+}
 
-void managefile::File::SetPos(size_t index)  {
-    if (stream.eof()) {
-        stream.clear();
+void managefile::File::Write(File &other, size_t buff_size) {
+    other.SetBegin();
+    while (!other.IsEOF()){
+        std::vector <char> buff = other.Read(buff_size);
+        Write(buff);
     }
+}
+
+void managefile::File::WritePos(size_t pos, const std::span<char> data) {
+    SetPos(pos);
+    Write(data);
+}
+
+void managefile::File::WritePos(size_t pos, File &other, size_t buff_size) {
+    SetPos(pos);
+    Write(other, buff_size);
+}
+
+void managefile::File::SetPos(size_t index) {
+    if (IsEOF()){
+        ClearEOF();
+    }
+
     stream.seekg(index, std::ios::beg);
 }
 
-void managefile::File::NextPos(size_t next_pos) { SetPos(static_cast<size_t>(GetPos()) + next_pos); }
-
-void managefile::File::Replace(size_t pos, const std::string &str, size_t size_replace) {
-    if (stream.eof()) {
-        stream.clear();
+void managefile::File::SetBegin() {
+    if (IsEOF()){
+        ClearEOF();
     }
 
-    stream.seekg(pos, std::ios::beg);
-    stream.write(&str[0], size_replace);
+    stream.seekg(0, std::ios::beg);
 }
 
-void managefile::File::PushBack(const std::string &str, size_t size_add) {
-    if (stream.eof()) {
-        stream.clear();
+void managefile::File::SetEnd() {
+    if (IsEOF()){
+        ClearEOF();
     }
 
     stream.seekg(0, std::ios::end);
-    stream.write(&str[0], size_add);
 }
 
-void managefile::File::PushBack(File &other, size_t size_buff) {
-    std::string buff(size_buff, '0');
+void managefile::File::MovePos(ssize_t move_size){
+    if (IsEOF()){
+        ClearEOF();
+    }
+
+    stream.seekg(move_size, std::ios::cur);
+}
+
+void managefile::File::PushBack(const std::span<char> data, size_t buff_size) {
+    SetEnd();
+    Write(data);
+}
+
+void managefile::File::PushBack(File &other, size_t buff_size) {
+    std::vector<char> buff(buff_size);
     other.SetPos(0);
 
     while (!other.IsEOF()) {
-        buff = other.GetCurrentData(size_buff);
+        buff = other.Read(buff_size);
         PushBack(buff, other.GCount());
     }
 }
 
-void managefile::File::ReplaceCurrentPos(const std::string &str, size_t size_replace) {
-    if (stream.eof()) {
-        stream.clear();
+void managefile::File::Insert(size_t pos, const std::span<char> data, size_t buff_size) {
+    File temp_file = CreateTempFile();
+    temp_file.SetBegin();
+    SetPos(pos);
+
+    while (!IsEOF()) {
+        std::vector<char> buff = Read(buff_size);
+        size_t count_symbol = GCount();
+        temp_file.PushBack(buff, count_symbol);
     }
 
-    stream.write(&str[0], size_replace);
+    WritePos(pos, data);
+    Write(temp_file, buff_size);
 }
 
-void managefile::File::Insert(size_t pos, const std::string &str, size_t size_insert, size_t size_buff) {
-    if (stream.eof()) {
-        stream.clear();
+void managefile::File::Insert(size_t pos, File &other, size_t buff_size) {
+    File temp_file = CreateTempFile();
+    temp_file.SetBegin();
+    SetPos(pos);
+
+    while (!IsEOF()) {
+        std::vector <char> buff = Read(buff_size);
+        temp_file.PushBack(buff, buff.size());
     }
 
-    File current_file = GetUniqueFile();
-    stream.seekg(pos, std::ios::beg);
-    std::string buff(size_buff, '0');
-    while (!stream.eof()) {
-        stream.read(&buff[0], size_buff);
-        size_t count_symbol = stream.gcount();
-        current_file.PushBack(buff, count_symbol);
-    }
-
-    Replace(pos, str, size_insert);
-    current_file.SetPos(0);
-
-    while (!current_file.IsEOF()) {
-        buff = current_file.GetCurrentData(size_buff);
-        ReplaceCurrentPos(buff, current_file.GCount());
-    }
-
-    current_file.Delete();
+    WritePos(pos, other, buff_size);
+    Write(temp_file, buff_size);
 }
 
-void managefile::File::DeletePos(size_t pos, size_t size_delete, size_t size_buff) {
-    if (stream.eof()) {
-        stream.clear();
+void managefile::File::PopBack(size_t delete_size) {
+    if (delete_size > Length()){
+        delete_size = Length();
     }
+    std::filesystem::resize_file(FilePath(), Length() - delete_size);
+}
 
+void managefile::File::Erase(size_t pos, size_t delete_size, size_t buff_size) {
     SetPos(0);
-    File current_file = GetUniqueFile();
-    std::string buff(size_buff, '0');
-    while (!stream.eof() && GetPos() < pos) {
-        if (pos - GetPos() > size_buff){
-            stream.read(&buff[0], size_buff);
-        }
-        else{
-            stream.read(&buff[0], pos - GetPos());
+    File temp_file = CreateTempFile();
+    
+    while (!IsEOF() && Pos() < pos) {
+        std::vector <char> buff;
+        if (pos - Pos() > buff_size) {
+            buff = Read(buff_size);
+        } else {
+            buff = Read(pos - Pos());
         }
 
-        size_t count_symbol = stream.gcount();
-        current_file.PushBack(buff, count_symbol);
-    }
-    NextPos(size_delete);
-    while (!stream.eof()){
-        stream.read(&buff[0], size_buff);
-
-        size_t count_symbol = stream.gcount();
-        current_file.PushBack(buff, count_symbol);
+        temp_file.PushBack(buff, buff.size());
     }
 
-    current_file.SetPos(0);
-    stream.close();
-    stream.open(fully_name, std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc);
+    MovePos(delete_size);
 
-    PushBack(current_file, size_buff);
+    while (!IsEOF()) {
+        std::vector <char> buff = Read(buff_size);
 
-    current_file.Delete();
+        temp_file.PushBack(buff, buff.size());
+    }
+
+    temp_file.SetPos(0);
+    Close();
+    Open(0, 1);
+
+    PushBack(temp_file, buff_size);
 }
 
-void managefile::File::Delete() { stream.close(); std::remove((fully_name).c_str()); }
+void managefile::File::Delete() {
+    Close();
+    std::remove((FilePath()).c_str());
+}
 
-size_t managefile::File::GetSize() const { return std::filesystem::file_size(fully_name); }
-
-managefile::File managefile::File::GetUniqueFile() {
+managefile::File managefile::File::CreateTempFile() {
     std::string name = "current";
     std::string result_name = name + ".tmp";
 
@@ -253,16 +256,15 @@ managefile::File managefile::File::GetUniqueFile() {
         result_name = name + std::to_string(number) + ".tmp";
     }
 
-    File result(name + std::to_string(number), "tmp");
+    File result(name + std::to_string(number) + ".tmp", true, true);
 
     return result;
 }
 
 managefile::File::~File() {
-    if (is_tmp) {
+    if (delete_on_close) {
         Delete();
-    }
-    else{
-        stream.close();
+    } else {
+        Close();
     }
 }
