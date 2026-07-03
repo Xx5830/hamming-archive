@@ -36,3 +36,4 @@ build/
 
 # Репомикс
 repomix-output.xml
+*.vscode

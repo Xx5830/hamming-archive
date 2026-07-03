@@ -5,23 +5,17 @@
 namespace argparser {
 
 Parser::Parser()
-    : create(false), list(false), extract(false),
-      insert(false), erase(false), concatenate(false),
-      encoding_data(256, 1),
-      encoding_size_file(8, 1),
-      encoding_size_name_file(8, 1),
-      encoding_name_file(8, 1),
+    : create(false), list(false), extract(false), insert(false), erase(false), concatenate(false),
+      encoding_data(256, 1), encoding_size_file(8, 1), encoding_size_name_file(8, 1), encoding_name_file(8, 1),
       encoding_encoding_data_file(8, 1) {}
 
-std::string Parser::ArgToString(char* arr) {
-    return std::string(arr);
-}
+std::string Parser::ArgToString(char* arr) { return std::string(arr); }
 
 managefile::Hamarc::EncodingInfo Parser::ParseEncodingArg(int& index, int argc, char** argv) {
     if (index + 2 >= argc) {
         throw std::invalid_argument("encoding flag requires two arguments: <bits> <copies>");
     }
-    size_t bits   = static_cast<size_t>(std::atoll(argv[index + 1]));
+    size_t bits = static_cast<size_t>(std::atoll(argv[index + 1]));
     size_t copies = static_cast<size_t>(std::atoll(argv[index + 2]));
     index += 2;
     return managefile::Hamarc::EncodingInfo(bits, static_cast<uint32_t>(copies));
@@ -51,15 +45,15 @@ void Parser::Parse(int argc, char** argv) {
         } else if (cu.size() > 7 && cu.substr(0, 7) == "--file=") {
             archive = cu.substr(7);
 
-        } else if (cu == "--encoding-data"      || cu == "-e-d") {
+        } else if (cu == "--encoding-data" || cu == "-e-d") {
             encoding_data = ParseEncodingArg(index, argc, argv);
         } else if (cu == "--encoding-size-file" || cu == "-e-sf") {
             encoding_size_file = ParseEncodingArg(index, argc, argv);
         } else if (cu == "--encoding-size-name" || cu == "-e-sn") {
             encoding_size_name_file = ParseEncodingArg(index, argc, argv);
-        } else if (cu == "--encoding-name"      || cu == "-e-nf") {
+        } else if (cu == "--encoding-name" || cu == "-e-nf") {
             encoding_name_file = ParseEncodingArg(index, argc, argv);
-        } else if (cu == "--encoding-meta"      || cu == "-e-m") {
+        } else if (cu == "--encoding-meta" || cu == "-e-m") {
             encoding_encoding_data_file = ParseEncodingArg(index, argc, argv);
 
         } else {

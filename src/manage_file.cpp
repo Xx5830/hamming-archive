@@ -1,7 +1,6 @@
 #include "headers/manager_files.hpp"
 
-managefile::File::File()
-    : delete_on_close_(false) {}
+managefile::File::File() : delete_on_close_(false) {}
 
 void managefile::File::Open(bool create_if_not_exists, bool need_clear_on_open) {
     if (!std::filesystem::exists(FilePath()) && create_if_not_exists) {
@@ -18,8 +17,8 @@ void managefile::File::Open(bool create_if_not_exists, bool need_clear_on_open) 
     stream_ = std::fstream{FilePath(), mode};
 }
 
-managefile::File::File(const std::string& file_path, bool create_if_not_exists,
-                       bool delete_on_close, bool need_clear_on_open)
+managefile::File::File(const std::string& file_path, bool create_if_not_exists, bool delete_on_close,
+                       bool need_clear_on_open)
     : delete_on_close_(delete_on_close) {
     ssize_t pos_slash = -1;
     ssize_t pos_point = -1;
@@ -41,18 +40,14 @@ managefile::File::File(const std::string& file_path, bool create_if_not_exists,
         format_ = file_path.substr(pos_point + 1);
     }
 
-    ssize_t effective_point = (pos_point == -1)
-        ? static_cast<ssize_t>(file_path.size())
-        : pos_point;
+    ssize_t effective_point = (pos_point == -1) ? static_cast<ssize_t>(file_path.size()) : pos_point;
 
     name_ = file_path.substr(pos_slash + 1, effective_point - pos_slash - 1);
 
     Open(create_if_not_exists, need_clear_on_open);
 }
 
-managefile::File::File(File&& other) {
-    *this = std::move(other);
-}
+managefile::File::File(File&& other) { *this = std::move(other); }
 
 managefile::File& managefile::File::operator=(File&& other) {
     if (this == &other) {
@@ -61,56 +56,38 @@ managefile::File& managefile::File::operator=(File&& other) {
     if (IsOpen()) {
         stream_.close();
     }
-    file_path_       = std::move(other.file_path_);
-    name_            = std::move(other.name_);
+    file_path_ = std::move(other.file_path_);
+    name_ = std::move(other.name_);
     directories_path_ = std::move(other.directories_path_);
-    format_          = std::move(other.format_);
-    stream_          = std::move(other.stream_);
+    format_ = std::move(other.format_);
+    stream_ = std::move(other.stream_);
     delete_on_close_ = other.delete_on_close_;
     other.delete_on_close_ = false;
     return *this;
 }
 
-void managefile::File::Close() {
-    stream_.close();
-}
+void managefile::File::Close() { stream_.close(); }
 
-bool managefile::File::IsOpen() const {
-    return stream_.is_open();
-}
+bool managefile::File::IsOpen() const { return stream_.is_open(); }
 
-bool managefile::File::IsEOF() const {
-    return stream_.eof();
-}
+bool managefile::File::IsEOF() const { return stream_.eof(); }
 
-void managefile::File::ClearEOF() {
-    stream_.clear();
-}
+void managefile::File::ClearEOF() { stream_.clear(); }
 
 std::string managefile::File::Name() const { return name_; }
 std::string managefile::File::Directories() const { return directories_path_; }
 std::string managefile::File::Format() const { return format_; }
 std::string managefile::File::FilePath() const { return file_path_; }
 
-ssize_t managefile::File::Pos() {
-    return static_cast<ssize_t>(stream_.tellg());
-}
+ssize_t managefile::File::Pos() { return static_cast<ssize_t>(stream_.tellg()); }
 
-size_t managefile::File::GCount() const {
-    return static_cast<size_t>(stream_.gcount());
-}
+size_t managefile::File::GCount() const { return static_cast<size_t>(stream_.gcount()); }
 
-size_t managefile::File::Length() const {
-    return std::filesystem::file_size(FilePath());
-}
+size_t managefile::File::Length() const { return std::filesystem::file_size(FilePath()); }
 
-void managefile::File::MakeTemp() {
-    delete_on_close_ = true;
-}
+void managefile::File::MakeTemp() { delete_on_close_ = true; }
 
-void managefile::File::UnMakeTemp() {
-    delete_on_close_ = false;
-}
+void managefile::File::UnMakeTemp() { delete_on_close_ = false; }
 
 std::vector<char> managefile::File::Read(size_t read_size) {
     std::vector<char> current(read_size);
@@ -177,10 +154,9 @@ void managefile::File::MovePos(ssize_t move_size) {
         ClearEOF();
     }
     stream_.seekg(move_size, std::ios::cur);
-    stream_.seekp(move_size, std::ios::cur);
 }
 
-void managefile::File::PushBack(std::span<const char> data, size_t /*buff_size*/) {
+void managefile::File::PushBack(std::span<const char> data, size_t) {
     SetEnd();
     Write(data);
 }
@@ -222,6 +198,7 @@ void managefile::File::Insert(size_t pos, File& other, size_t buff_size) {
 }
 
 void managefile::File::PopBack(size_t delete_size) {
+    stream_.flush();
     size_t len = Length();
     if (delete_size > len) {
         delete_size = len;

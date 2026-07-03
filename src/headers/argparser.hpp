@@ -29,7 +29,7 @@ namespace argparser {
  *   -e-d, -e-sf, -e-sn, -e-nf, -e-m
  *
  * Имена файлов передаются как свободные аргументы.
- * Имена архивов для --concatenate - свободные аргументы с расширением .haf
+ * Имена архивов для --concatenate — свободные аргументы с расширением .haf
  */
 struct Parser {
     bool create;

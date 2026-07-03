@@ -104,7 +104,7 @@ class Hamarc : public Archive {
 
   public:
     struct EncodingInfo {
-        uint64_t count_data_bits;
+        uint64_t count_data_bits; 
         uint64_t count_data_bytes;
         uint64_t count_hemming_bits;
         uint64_t count_additional_bytes;
