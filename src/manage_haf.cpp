@@ -35,13 +35,13 @@ managefile::Hamarc::EncodingInfo::EncodingInfo() {}
 
 uint32_t managefile::Hamarc::EncodingInfo::ToInt() const { return (count_data_bits << 8) + (count_copy & 0b11111111); }
 
-bool managefile::Hamarc::EncodingInfo::operator==(const EncodingInfo &other) const {
+bool managefile::Hamarc::EncodingInfo::operator==(const EncodingInfo& other) const {
     return count_data_bits == other.count_data_bits && count_data_bytes == other.count_data_bytes &&
            count_additional_bytes == other.count_additional_bytes && count_hemming_bits == other.count_hemming_bits &&
            count_copy == other.count_copy;
 }
 
-bool managefile::Hamarc::ConfigEncodingFile::operator==(const ConfigEncodingFile &other) const {
+bool managefile::Hamarc::ConfigEncodingFile::operator==(const ConfigEncodingFile& other) const {
     return size_file == other.size_file && size_name_file == other.size_name_file && name_file == other.name_file &&
            encoding_data_file == other.encoding_data_file;
 }
@@ -54,7 +54,7 @@ managefile::Hamarc::ConfigEncodingFile::ConfigEncodingFile(EncodingInfo size_fil
     : size_file(size_file), size_name_file(size_name_file), name_file(name_file),
       encoding_data_file(encoding_data_file) {}
 
-managefile::Hamarc::ConfigEncodingFile::ConfigEncodingFile(const std::span<char> &arr) {
+managefile::Hamarc::ConfigEncodingFile::ConfigEncodingFile(const std::span<char>& arr) {
     for (size_t start_index = 0; start_index < arr.size(); start_index += 8) {
         char current[8];
         for (size_t index = start_index; index < start_index + 8; index++) {
@@ -120,7 +120,7 @@ std::vector<char> managefile::Hamarc::IntegralToVectorCHar(long long num, size_t
 }
 
 std::vector<uint8_t> managefile::Hamarc::HemmingBytes(const std::span<char> data,
-                                                      const EncodingInfo &encoding_info) const {
+                                                      const EncodingInfo& encoding_info) const {
     std::vector<uint8_t> EncodingBytes(encoding_info.count_additional_bytes +
                                        (encoding_info.count_data_bits % 8 != 0 ? 1 : 0));
 
@@ -170,7 +170,7 @@ std::vector<uint8_t> managefile::Hamarc::HemmingBytes(const std::span<char> data
 }
 
 std::vector<char> managefile::Hamarc::EncodeBlock(const std::span<char> block,
-                                                  const EncodingInfo &encoding_info) const {
+                                                  const EncodingInfo& encoding_info) const {
     std::vector<char> result(block.size());
 
     for (size_t index = 0; index < block.size(); index++) {
@@ -215,7 +215,7 @@ std::vector<char> managefile::Hamarc::EncodeBlock(const std::span<char> block,
     return result;
 }
 
-std::vector<char> managefile::Hamarc::EncodeData(const std::span<char> data, const EncodingInfo &encoding_info) const {
+std::vector<char> managefile::Hamarc::EncodeData(const std::span<char> data, const EncodingInfo& encoding_info) const {
     struct ReadMachine {
         std::vector<char> current;
         std::vector<std::vector<char>> blocks;
@@ -307,7 +307,7 @@ std::vector<char> managefile::Hamarc::EncodeHat(Hat hat) const {
     return result;
 }
 
-managefile::File managefile::Hamarc::EncodeFile(File &file, const EncodingInfo &encoding_data, size_t buff_size) const {
+managefile::File managefile::Hamarc::EncodeFile(File& file, const EncodingInfo& encoding_data, size_t buff_size) const {
     File tmp_file = file.CreateTempFile();
 
     auto lambda_gcd = [](long long a, long long b) {
@@ -352,7 +352,7 @@ managefile::File managefile::Hamarc::EncodeFile(File &file, const EncodingInfo &
 }
 
 std::vector<char> managefile::Hamarc::DecodeBlock(const std::span<char> block,
-                                                  const EncodingInfo &encoding_info) const {
+                                                  const EncodingInfo& encoding_info) const {
     std::vector<char> data(encoding_info.count_data_bytes);
     std::vector<uint8_t> hemming_bytes1;
 
@@ -427,7 +427,7 @@ std::vector<char> managefile::Hamarc::DecodeBlock(const std::span<char> block,
     return data;
 }
 
-std::vector<char> managefile::Hamarc::DecodeData(std::span<char> data, const EncodingInfo &encoding_info) {
+std::vector<char> managefile::Hamarc::DecodeData(std::span<char> data, const EncodingInfo& encoding_info) {
     size_t size_block =
         (encoding_info.count_data_bytes + encoding_info.count_additional_bytes) * encoding_info.count_copy;
     size_t count_block = data.size() / size_block;
@@ -490,7 +490,7 @@ std::vector<char> managefile::Hamarc::DecodeData(std::span<char> data, const Enc
     return result_data;
 }
 
-std::vector<char> managefile::Hamarc::DecodePosBlock(size_t pos, const EncodingInfo &encoding_info) {
+std::vector<char> managefile::Hamarc::DecodePosBlock(size_t pos, const EncodingInfo& encoding_info) {
     file.SetPos(pos);
     size_t size_block =
         (encoding_info.count_data_bytes + encoding_info.count_additional_bytes) * encoding_info.count_copy;
@@ -501,7 +501,6 @@ std::vector<char> managefile::Hamarc::DecodePosBlock(size_t pos, const EncodingI
     return encoded_data;
 }
 
-// improve const size block in hat
 managefile::Hamarc::Hat managefile::Hamarc::DecodeHat(const size_t pos) {
     file.SetPos(pos);
 
@@ -536,7 +535,7 @@ managefile::Hamarc::Hat managefile::Hamarc::DecodeHat(const size_t pos) {
     return result_hat;
 }
 
-managefile::File managefile::Hamarc::DecodeFile(size_t pos, const Hat &hat, size_t buff_size) {
+managefile::File managefile::Hamarc::DecodeFile(size_t pos, const Hat& hat, size_t buff_size) {
     File tmp_file = File::CreateTempFile();
     file.SetPos(pos);
 
@@ -573,7 +572,7 @@ managefile::File managefile::Hamarc::DecodeFile(size_t pos, const Hat &hat, size
     return std::move(tmp_file);
 }
 
-size_t managefile::Hamarc::GetSizeFile(const Hat &hat) const {
+size_t managefile::Hamarc::GetSizeFile(const Hat& hat) const {
     EncodingInfo encoding_data(hat.encoding_data_file >> 8, (hat.encoding_data_file << 56) >> 56);
 
     size_t size_block =
@@ -590,7 +589,7 @@ size_t managefile::Hamarc::GetSizeFile(const Hat &hat) const {
 
 size_t managefile::Hamarc::GetPosFirstFile() { return begin_file_pos; }
 
-managefile::Hamarc::Hamarc(const std::string &file_path, bool create_if_not_exist, const ConfigEncodingFile &config) {
+managefile::Hamarc::Hamarc(const std::string& file_path, bool create_if_not_exist, const ConfigEncodingFile& config) {
     if (std::filesystem::exists(file_path) && std::filesystem::file_size(file_path) > 0) {
         file = File(file_path, create_if_not_exist);
 
@@ -642,7 +641,8 @@ managefile::Hamarc::Hamarc(const std::string &file_path, bool create_if_not_exis
 
         count_file = 0;
         size_t current_pos = begin_file_pos;
-        while (current_pos < file.Length()) {
+        size_t file_length = file.Length();
+        while (current_pos < file_length) {
             Hat hat = DecodeHat(file.Pos());
             count_file++;
             size_t move_pos = GetSizeFile(hat);
@@ -679,7 +679,7 @@ managefile::Hamarc::Hamarc(const std::string &file_path, bool create_if_not_exis
 
 managefile::Hamarc::ConfigEncodingFile managefile::Hamarc::GetConfig() { return config; }
 
-std::pair<managefile::File, bool> managefile::Hamarc::Get(const std::string &name) {
+std::pair<managefile::File, bool> managefile::Hamarc::Get(const std::string& name) {
     File tmp_file;
 
     file.SetPos(GetPosFirstFile());
@@ -696,10 +696,11 @@ std::pair<managefile::File, bool> managefile::Hamarc::Get(const std::string &nam
         file.MovePos(size_file);
     }
 
+    tmp_file.SetBegin();
     return {std::move(tmp_file), false};
 }
 
-ssize_t managefile::Hamarc::GetPos(const std::string &name) {
+ssize_t managefile::Hamarc::GetPos(const std::string& name) {
     file.SetPos(GetPosFirstFile());
     for (size_t index_file = 0; index_file < Length(); index_file++) {
         size_t start_file_pos = file.Pos();
@@ -716,18 +717,18 @@ ssize_t managefile::Hamarc::GetPos(const std::string &name) {
     return -1;
 }
 
-void managefile::Hamarc::Add(File &file) {
+void managefile::Hamarc::Add(File& file) {
     EncodingInfo encoding_info(256, 1);
     Add(file, encoding_info);
 }
 
-void managefile::Hamarc::Add(File &file, const EncodingInfo &encoding_info) {
+void managefile::Hamarc::Add(File& file, const EncodingInfo& encoding_info) {
     File tmp_file = EncodeFile(file, encoding_info);
     this->file.PushBack(tmp_file);
     ++count_file;
 }
 
-void managefile::Hamarc::Delete(const std::string &name) {
+void managefile::Hamarc::Delete(const std::string& name) {
     ssize_t start_pos = GetPos(name);
 
     if (start_pos != -1) {
@@ -767,30 +768,18 @@ std::vector<managefile::File> managefile::Hamarc::GetAll() {
         Hat hat = DecodeHat(file.Pos());
         size_t cu_pos = file.Pos();
         File file = std::move(DecodeFile(cu_pos, hat));
-        File result_file(hat.name_file, true, false, true);
+        File result_file(hat.name_file, true, true, true);
         result_file.PushBack(file);
+        result_file.SetBegin();
         result[index_file] = std::move(result_file);
     }
 
     return result;
 }
 
-bool managefile::Hamarc::Merge(Hamarc &other) {
-    if (config == other.config) {
-        std::vector<File> files = other.GetAll();
-        for (size_t index = 0; index < files.size(); index++) {
-            file.PushBack(files[index]);
-        }
-
-        return true;
+void managefile::Hamarc::Merge(Hamarc& other) {
+    std::vector<File> files = other.GetAll();
+    for (size_t index = 0; index < files.size(); index++) {
+        Add(files[index]);
     }
-    else{
-        std::vector<File> files = other.GetAll();
-
-        for (size_t index = 0; index > files.size(); index++){
-            Add(files[index]);
-        }
-    }
-
-    return false;
 }

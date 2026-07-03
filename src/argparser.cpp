@@ -56,7 +56,11 @@ void argparser::Parser::Parse(size_t argc, char **argv) {
             encoding_encoding_data_file = managefile::Hamarc::EncodingInfo(count_bit, count_copy);
             index += 2;
         } else {
+<<<<<<< HEAD
             if (cu.size() > 3 && cu.substr(cu.size() - 3, 3) == ".haf") {
+=======
+            if (cu.size() > 3 && cu.substr(cu.size() - 4, 4) == ".haf") {
+>>>>>>> d6641a0 (synch)
                 archives.push_back(cu);
             } else {
                 files.push_back(cu);

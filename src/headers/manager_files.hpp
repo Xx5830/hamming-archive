@@ -42,6 +42,11 @@ class File {
     ssize_t Pos();
     size_t GCount() const;
     size_t Length() const;
+<<<<<<< HEAD
+=======
+    void MakeTemp();
+    void UnMakeTemp();
+>>>>>>> d6641a0 (synch)
 
     std::vector<char> Read(size_t read_size);
     std::vector<char> ReadPos(size_t pos, size_t read_size);
@@ -181,7 +186,11 @@ class Hamarc : public Archive {
 
     std::vector<File> GetAll();
 
+<<<<<<< HEAD
     bool Merge(Hamarc &other);
+=======
+    void Merge(Hamarc &other);
+>>>>>>> d6641a0 (synch)
 };
 
 } // namespace managefile

@@ -26,7 +26,11 @@ struct Parser{
 
     inline Parser(){
         create = list = extract = insert = erase = concatenate = 0;
+<<<<<<< HEAD
         encoding_data = managefile::Hamarc::EncodingInfo(8, 1);
+=======
+        encoding_data = managefile::Hamarc::EncodingInfo(256, 1);
+>>>>>>> d6641a0 (synch)
         encoding_size_file = managefile::Hamarc::EncodingInfo(8, 1);
         encoding_size_name_file = managefile::Hamarc::EncodingInfo(8, 1);
         encoding_name_file = managefile::Hamarc::EncodingInfo(8, 1);

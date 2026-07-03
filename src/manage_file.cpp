@@ -91,6 +91,13 @@ size_t managefile::File::GCount() const { return stream.gcount(); }
 
 size_t managefile::File::Length() const { return std::filesystem::file_size(FilePath()); }
 
+<<<<<<< HEAD
+=======
+void managefile::File::MakeTemp() {delete_on_close = true;}
+
+void managefile::File::UnMakeTemp() {delete_on_close = false;}
+
+>>>>>>> d6641a0 (synch)
 std::vector<char> managefile::File::Read(size_t read_size) {
     std::vector <char> current(read_size);
 
