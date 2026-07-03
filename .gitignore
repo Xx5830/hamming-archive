@@ -39,3 +39,13 @@
 
 # debug information files
 *.dwo
+
+.vscode
+build
+src/.vscode
+src/resources
+src/out
+src/here
+src/test
+src/manage_haf
+src/manage_file

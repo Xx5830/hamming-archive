@@ -1,9 +1,9 @@
-#include "../src/headers/argparser.hpp"
-#include "../src/headers/manager_files.hpp"
+#include "headers/argparser.hpp"
+#include "headers/manager_files.hpp"
 #include <filesystem>
 #include <iostream>
 
-const managefile::Hamarc::ConfigEncodingFile default_config({8, 1}, {8, 1}, {8,1}, {8, 1});
+const managefile::Hamarc::ConfigEncodingFile default_config({8, 1}, {8, 1}, {8, 1}, {8, 1});
 
 int main(int argc, char **argv) {
     argparser::Parser parser;
@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
     }
     if (parser.erase) {
         for (uint32_t index = 0; index < parser.files.size(); index++) {
-            std::string file_name = parser.files[index];;
+            std::string file_name = parser.files[index];
             my_archive.Delete(file_name);
         }
     }
