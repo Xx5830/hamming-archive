@@ -1,20 +1,36 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(HamArc LANGUAGES CXX)
+project(HamArc
+    VERSION 1.0.0
+    DESCRIPTION "Помехоустойчивый архиватор на основе кодов Хэмминга"
+    LANGUAGES CXX
+)
 
 set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
-#add_subdirectory(src)
-#add_subdirectory(bin)
-add_executable(
-    hamarc
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(
+        -Wall -Wextra -Wpedantic
+        -Wno-unused-parameter
+    )
+endif()
+
+
+add_executable(hamarc
     bin/main.cpp
     src/manage_haf.cpp
     src/manage_file.cpp
     src/argparser.cpp
-    src/headers/argparser.hpp
-    src/headers/manager_files.hpp
 )
 
-enable_testing()
-add_subdirectory(tests)
+target_include_directories(hamarc PRIVATE src)
+target_compile_features(hamarc PRIVATE cxx_std_23)
+
+
+if(BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

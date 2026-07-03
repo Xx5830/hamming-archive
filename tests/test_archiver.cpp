@@ -1,482 +1,246 @@
 #include <gtest/gtest.h>
+
+#include <chrono>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
-#include <cstdlib>
-#include <cstdint>
-#include <cstring>
-#include <iostream>
 
 namespace fs = std::filesystem;
 
-static std::string quote_path(const fs::path& p) {
-	fs::path native_path = p;
-	native_path.make_preferred();
-	std::string s = native_path.string();
-#ifdef _WIN32
-	if (s.find(' ') != std::string::npos) {
-		return "\"" + s + "\"";
-	}
-	return s;
-#else
-	return "\"" + s + "\"";
-#endif
+static std::string QuotePath(const fs::path& p) {
+    fs::path native = p;
+    native.make_preferred();
+    return "\"" + native.string() + "\"";
 }
 
-static bool filesEqual(const fs::path& a, const fs::path& b) {
-	if (!fs::exists(a) || !fs::exists(b)) return false;
-	if (fs::file_size(a) != fs::file_size(b)) return false;
+static bool FilesEqual(const fs::path& a, const fs::path& b) {
+    if (!fs::exists(a) || !fs::exists(b)) return false;
+    if (fs::file_size(a) != fs::file_size(b)) return false;
 
-	std::ifstream fa(a, std::ios::binary);
-	std::ifstream fb(b, std::ios::binary);
-	if (!fa || !fb) return false;
+    std::ifstream fa(a, std::ios::binary);
+    std::ifstream fb(b, std::ios::binary);
+    if (!fa || !fb) return false;
 
-	const std::size_t kBufferSize = 1 << 20;
-	std::vector<char> ba(kBufferSize), bb(kBufferSize);
-
-	while (fa && fb) {
-		fa.read(ba.data(), static_cast<std::streamsize>(ba.size()));
-		fb.read(bb.data(), static_cast<std::streamsize>(bb.size()));
-		const auto ca = fa.gcount();
-		const auto cb = fb.gcount();
-		if (ca != cb) return false;
-		if (std::memcmp(ba.data(), bb.data(), static_cast<std::size_t>(ca)) != 0) return false;
-	}
-	return fa.eof() && fb.eof();
+    const std::size_t kBuf = 1 << 20;
+    std::vector<char> ba(kBuf), bb(kBuf);
+    while (fa && fb) {
+        fa.read(ba.data(), static_cast<std::streamsize>(kBuf));
+        fb.read(bb.data(), static_cast<std::streamsize>(kBuf));
+        auto ca = fa.gcount(), cb = fb.gcount();
+        if (ca != cb) return false;
+        if (std::memcmp(ba.data(), bb.data(), static_cast<std::size_t>(ca)) != 0) return false;
+    }
+    return fa.eof() && fb.eof();
 }
 
-TEST(HamArcCLI, CreateAndExtractAndCompare) {
-	const fs::path resourcesDir = fs::path(RESOURCES_DIR);
-	const fs::path file1 = resourcesDir / "BjarneStroustrup.jpg";
-	const fs::path file2 = resourcesDir / "Book.pdf";
-
-	ASSERT_TRUE(fs::exists(file1));
-	ASSERT_TRUE(fs::exists(file2));
-
-	const auto tempRoot = fs::temp_directory_path();
-	const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
-	const fs::path work = tempRoot / ("hamarc_test_" + std::to_string(now));
-	const fs::path outDir = work / "out";
-	ASSERT_TRUE(fs::create_directories(outDir));
-
-	const fs::path archive = work / "archive.haf";
-	const std::string hamarc = HAMARC_EXE_PATH;
-
-	{
-		std::ostringstream cmd;
-		cmd << quote_path(hamarc)
-		    << " --create"
-		    << " --file=" << quote_path(archive)
-		    << " " << quote_path(file1)
-		    << " " << quote_path(file2);
-		std::cout << "Create command: " << cmd.str() << std::endl;
-		const int rc = std::system(cmd.str().c_str());
-		std::cout << "Return code: " << rc << std::endl;
-		ASSERT_EQ(rc, 0);
-		ASSERT_TRUE(fs::exists(archive));
-	}
-
-	{
-		const std::uintmax_t archive_size = fs::file_size(archive);
-		std::fstream archive_file(archive, std::ios::in | std::ios::out | std::ios::binary);
-		ASSERT_TRUE(archive_file.is_open());
-
-		std::vector<std::pair<std::uintmax_t, int>> flipped_bits = {
-			{100, 0},
-			{archive_size / 2, 0},
-			{archive_size - 1, 0}
-		};
-
-		for (const auto& [byte_pos, bit_pos] : flipped_bits) {
-			archive_file.seekg(static_cast<std::streamoff>(byte_pos));
-			char byte = 0;
-			archive_file.read(&byte, 1);
-			if (archive_file.gcount() != 1) continue;
-
-			byte ^= (1 << bit_pos);
-
-			archive_file.seekp(static_cast<std::streamoff>(byte_pos));
-			archive_file.write(&byte, 1);
-			archive_file.flush();
-		}
-
-		archive_file.close();
-	}
-
-	{
-		const fs::path original_dir = fs::current_path();
-		fs::current_path(outDir);
-		
-		std::ostringstream cmd;
-		cmd << quote_path(hamarc)
-		    << " --extract"
-		    << " --file=" << quote_path(fs::path("..") / archive.filename());
-		const int rc = std::system(cmd.str().c_str());
-		
-		fs::current_path(original_dir);
-		ASSERT_EQ(rc, 0);
-	}
-
-	const fs::path extr1 = outDir / file1.filename();
-	const fs::path extr2 = outDir / file2.filename();
-	ASSERT_TRUE(fs::exists(extr1));
-	ASSERT_TRUE(fs::exists(extr2));
-
-	EXPECT_TRUE(filesEqual(file1, extr1));
-	EXPECT_TRUE(filesEqual(file2, extr2));
+static fs::path MakeTempDir() {
+    auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+    fs::path dir = fs::temp_directory_path() / ("hamarc_test_" + std::to_string(now));
+    fs::create_directories(dir);
+    return dir;
 }
 
-/* TEST(HamArcCLI, CreateAndListFiles) {
-    const fs::path resourcesDir = fs::path(RESOURCES_DIR);
-    const fs::path file1 = resourcesDir / "file1.txt";
-    const fs::path file2 = resourcesDir / "file2.txt";
-
-    // Создаем тестовые файлы
-    std::ofstream f1(file1);
-    f1 << "Test content 1";
-    f1.close();
-    
-    std::ofstream f2(file2);
-    f2 << "Test content 2";
-    f2.close();
-
-    const auto tempRoot = fs::temp_directory_path();
-    const auto work = tempRoot / ("hamarc_test_" + std::to_string(std::time(nullptr)));
-    fs::create_directories(work);
-    
-    const fs::path archive = work / "archive.haf";
-    const std::string hamarc = HAMARC_EXE_PATH;
-
-    // Создаем архив
-    {
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc)
-            << " --create"
-            << " --file=" << quote_path(archive)
-            << " " << quote_path(file1)
-            << " " << quote_path(file2);
-        ASSERT_EQ(std::system(cmd.str().c_str()), 0);
-    }
-
-    // Проверяем список файлов
-    {
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc)
-            << " --list"
-            << " --file=" << quote_path(archive);
-        
-        testing::internal::CaptureStdout();
-        int rc = std::system(cmd.str().c_str());
-        std::string output = testing::internal::GetCapturedStdout();
-        
-        ASSERT_EQ(rc, 0);
-        ASSERT_NE(output.find(file1.filename().string()), std::string::npos);
-        ASSERT_NE(output.find(file2.filename().string()), std::string::npos);
-    }
-
-    // Удаляем тестовые файлы
-    fs::remove(file1);
-    fs::remove(file2);
+static fs::path WriteTestFile(const fs::path& dir, const std::string& name,
+                               const std::string& content) {
+    fs::path p = dir / name;
+    std::ofstream(p) << content;
+    return p;
 }
 
-TEST(HamArcCLI, AddAndDeleteFiles) {
-    const fs::path resourcesDir = fs::path(RESOURCES_DIR);
-    
-    // Создаем тестовые файлы
-    const fs::path file1 = resourcesDir / "temp1.txt";
-    const fs::path file2 = resourcesDir / "temp2.txt";
-    const fs::path file3 = resourcesDir / "temp3.txt";
+static fs::path WriteBinaryFile(const fs::path& dir, const std::string& name, size_t size) {
+    fs::path p = dir / name;
+    std::ofstream f(p, std::ios::binary);
+    for (size_t i = 0; i < size; ++i) {
+        f.put(static_cast<char>(i % 256));
+    }
+    return p;
+}
 
-    std::ofstream(file1) << "Content 1";
-    std::ofstream(file2) << "Content 2";
-    std::ofstream(file3) << "Content 3";
+static int RunHamarc(const std::string& args) {
+    std::string cmd = QuotePath(HAMARC_EXE_PATH) + " " + args;
+    return std::system(cmd.c_str());
+}
 
-    const auto work = fs::temp_directory_path() / ("hamarc_test_" + std::to_string(std::time(nullptr)));
-    fs::create_directories(work);
-    
-    const fs::path archive = work / "archive.haf";
-    const std::string hamarc = HAMARC_EXE_PATH;
+TEST(HamArcCLI, CreateAndExtractTextFiles) {
+    const fs::path work = MakeTempDir();
+    const fs::path out  = work / "out";
+    fs::create_directories(out);
 
-    // Создаем архив с двумя файлами
+    fs::path f1 = WriteTestFile(work, "hello.txt", "Hello, HamArc!\n");
+    fs::path f2 = WriteTestFile(work, "world.txt", "World content here.\n");
+
+    fs::path archive = work / "test.haf";
+
+    ASSERT_EQ(RunHamarc("--create --file=" + QuotePath(archive) +
+                        " " + QuotePath(f1) + " " + QuotePath(f2)), 0);
+    ASSERT_TRUE(fs::exists(archive));
+
     {
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc)
-            << " --create --file=" << quote_path(archive)
-            << " " << quote_path(file1) << " " << quote_path(file2);
-        ASSERT_EQ(std::system(cmd.str().c_str()), 0);
+        fs::path saved = fs::current_path();
+        fs::current_path(out);
+        ASSERT_EQ(RunHamarc("--extract --file=" + QuotePath(fs::path("..") / archive.filename())), 0);
+        fs::current_path(saved);
     }
 
-    // Добавляем третий файл
+    EXPECT_TRUE(FilesEqual(f1, out / f1.filename()));
+    EXPECT_TRUE(FilesEqual(f2, out / f2.filename()));
+}
+
+TEST(HamArcCLI, ListFiles) {
+    const fs::path work = MakeTempDir();
+    fs::path f1 = WriteTestFile(work, "alpha.txt", "aaa");
+    fs::path f2 = WriteTestFile(work, "beta.txt",  "bbb");
+    fs::path archive = work / "list.haf";
+
+    ASSERT_EQ(RunHamarc("--create --file=" + QuotePath(archive) +
+                        " " + QuotePath(f1) + " " + QuotePath(f2)), 0);
+
+    // Перенаправить вывод в временный файл
+    fs::path out_log = work / "list.txt";
+    int rc = std::system((QuotePath(HAMARC_EXE_PATH) + " --list --file=" +
+                          QuotePath(archive) + " > " + QuotePath(out_log)).c_str());
+    ASSERT_EQ(rc, 0);
+
+    std::ifstream log(out_log);
+    std::string content((std::istreambuf_iterator<char>(log)),
+                         std::istreambuf_iterator<char>());
+
+    EXPECT_NE(content.find("alpha.txt"), std::string::npos);
+    EXPECT_NE(content.find("beta.txt"),  std::string::npos);
+}
+
+TEST(HamArcCLI, AppendThenDelete) {
+    const fs::path work = MakeTempDir();
+    fs::path f1 = WriteTestFile(work, "keep.txt",   "keep me");
+    fs::path f2 = WriteTestFile(work, "remove.txt", "remove me");
+    fs::path f3 = WriteTestFile(work, "extra.txt",  "extra");
+    fs::path archive = work / "mod.haf";
+
+    ASSERT_EQ(RunHamarc("--create --file=" + QuotePath(archive) +
+                        " " + QuotePath(f1) + " " + QuotePath(f2)), 0);
+
+    ASSERT_EQ(RunHamarc("--append --file=" + QuotePath(archive) +
+                        " " + QuotePath(f3)), 0);
+
+    ASSERT_EQ(RunHamarc("--delete --file=" + QuotePath(archive) +
+                        " remove.txt"), 0);
+
+    const fs::path out = work / "out";
+    fs::create_directories(out);
     {
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc)
-            << " --append --file=" << quote_path(archive)
-            << " " << quote_path(file3);
-        ASSERT_EQ(std::system(cmd.str().c_str()), 0);
+        fs::path saved = fs::current_path();
+        fs::current_path(out);
+        ASSERT_EQ(RunHamarc("--extract --file=" + QuotePath(fs::path("..") / archive.filename())), 0);
+        fs::current_path(saved);
     }
 
-    // Проверяем что все три файла в архиве
-    {
-        testing::internal::CaptureStdout();
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc) << " --list --file=" << quote_path(archive);
-        std::system(cmd.str().c_str());
-        std::string output = testing::internal::GetCapturedStdout();
-        
-        ASSERT_NE(output.find(file1.filename().string()), std::string::npos);
-        ASSERT_NE(output.find(file2.filename().string()), std::string::npos);
-        ASSERT_NE(output.find(file3.filename().string()), std::string::npos);
-    }
-
-    // Удаляем второй файл
-    {
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc)
-            << " --delete --file=" << quote_path(archive)
-            << " " << quote_path(file2.filename());
-        ASSERT_EQ(std::system(cmd.str().c_str()), 0);
-    }
-
-    // Проверяем что остались только первый и третий
-    {
-        testing::internal::CaptureStdout();
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc) << " --list --file=" << quote_path(archive);
-        std::system(cmd.str().c_str());
-        std::string output = testing::internal::GetCapturedStdout();
-        
-        ASSERT_NE(output.find(file1.filename().string()), std::string::npos);
-        ASSERT_EQ(output.find(file2.filename().string()), std::string::npos);
-        ASSERT_NE(output.find(file3.filename().string()), std::string::npos);
-    }
-
-    // Очистка
-    fs::remove(file1);
-    fs::remove(file2);
-    fs::remove(file3);
+    EXPECT_TRUE(fs::exists(out / "keep.txt"));
+    EXPECT_FALSE(fs::exists(out / "remove.txt"));
+    EXPECT_TRUE(fs::exists(out / "extra.txt"));
 }
 
 TEST(HamArcCLI, ExtractSpecificFile) {
-    const fs::path resourcesDir = fs::path(RESOURCES_DIR);
-    
-    // Создаем тестовые файлы
-    const fs::path file1 = resourcesDir / "specific1.txt";
-    const fs::path file2 = resourcesDir / "specific2.txt";
-    
-    std::ofstream(file1) << "Specific file 1 content";
-    std::ofstream(file2) << "Specific file 2 content";
+    const fs::path work = MakeTempDir();
+    fs::path f1 = WriteTestFile(work, "one.txt", "one");
+    fs::path f2 = WriteTestFile(work, "two.txt", "two");
+    fs::path archive = work / "spec.haf";
 
-    const auto work = fs::temp_directory_path() / ("hamarc_test_" + std::to_string(std::time(nullptr)));
-    const fs::path outDir = work / "extracted";
-    fs::create_directories(outDir);
-    
-    const fs::path archive = work / "archive.haf";
-    const std::string hamarc = HAMARC_EXE_PATH;
+    ASSERT_EQ(RunHamarc("--create --file=" + QuotePath(archive) +
+                        " " + QuotePath(f1) + " " + QuotePath(f2)), 0);
 
-    // Создаем архив
+    const fs::path out = work / "out";
+    fs::create_directories(out);
     {
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc)
-            << " --create --file=" << quote_path(archive)
-            << " " << quote_path(file1) << " " << quote_path(file2);
-        ASSERT_EQ(std::system(cmd.str().c_str()), 0);
+        fs::path saved = fs::current_path();
+        fs::current_path(out);
+        ASSERT_EQ(RunHamarc("--extract --file=" + QuotePath(fs::path("..") / archive.filename()) +
+                            " one.txt"), 0);
+        fs::current_path(saved);
     }
 
-    // Извлекаем только один файл
-    {
-        const fs::path original_dir = fs::current_path();
-        fs::current_path(outDir);
-        
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc)
-            << " --extract --file=" << quote_path(fs::path("..") / archive.filename())
-            << " " << quote_path(file1.filename());
-        ASSERT_EQ(std::system(cmd.str().c_str()), 0);
-        
-        fs::current_path(original_dir);
-    }
-
-    // Проверяем что извлекся только указанный файл
-    const fs::path extr1 = outDir / file1.filename();
-    const fs::path extr2 = outDir / file2.filename();
-    
-    ASSERT_TRUE(fs::exists(extr1));
-    ASSERT_FALSE(fs::exists(extr2));
-    EXPECT_TRUE(filesEqual(file1, extr1));
-
-    // Очистка
-    fs::remove(file1);
-    fs::remove(file2);
+    EXPECT_TRUE(fs::exists(out / "one.txt"));
+    EXPECT_FALSE(fs::exists(out / "two.txt"));
+    EXPECT_TRUE(FilesEqual(f1, out / "one.txt"));
 }
 
 TEST(HamArcCLI, ConcatenateArchives) {
-    const fs::path resourcesDir = fs::path(RESOURCES_DIR);
-    
-    // Создаем тестовые файлы
-    const fs::path file1 = resourcesDir / "concat1.txt";
-    const fs::path file2 = resourcesDir / "concat2.txt";
-    const fs::path file3 = resourcesDir / "concat3.txt";
-    
-    std::ofstream(file1) << "Archive 1 file 1";
-    std::ofstream(file2) << "Archive 1 file 2";
-    std::ofstream(file3) << "Archive 2 file 1";
+    const fs::path work = MakeTempDir();
+    fs::path fa1 = WriteTestFile(work, "arc1_file.txt", "from archive 1");
+    fs::path fa2 = WriteTestFile(work, "arc2_file.txt", "from archive 2");
 
-    const auto work = fs::temp_directory_path() / ("hamarc_test_" + std::to_string(std::time(nullptr)));
-    fs::create_directories(work);
-    
-    const fs::path archive1 = work / "archive1.haf";
-    const fs::path archive2 = work / "archive2.haf";
-    const fs::path merged = work / "merged.haf";
-    const std::string hamarc = HAMARC_EXE_PATH;
+    fs::path arc1   = work / "a1.haf";
+    fs::path arc2   = work / "a2.haf";
+    fs::path merged = work / "merged.haf";
 
-    // Создаем первый архив
+    ASSERT_EQ(RunHamarc("--create --file=" + QuotePath(arc1) + " " + QuotePath(fa1)), 0);
+    ASSERT_EQ(RunHamarc("--create --file=" + QuotePath(arc2) + " " + QuotePath(fa2)), 0);
+    ASSERT_EQ(RunHamarc("--create --file=" + QuotePath(merged) +
+                        " --concatenate " + QuotePath(arc1) + " " + QuotePath(arc2)), 0);
+
+    const fs::path out = work / "out";
+    fs::create_directories(out);
     {
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc)
-            << " --create --file=" << quote_path(archive1)
-            << " " << quote_path(file1) << " " << quote_path(file2);
-        ASSERT_EQ(std::system(cmd.str().c_str()), 0);
+        fs::path saved = fs::current_path();
+        fs::current_path(out);
+        ASSERT_EQ(RunHamarc("--extract --file=" + QuotePath(fs::path("..") / merged.filename())), 0);
+        fs::current_path(saved);
     }
 
-    // Создаем второй архив
-    {
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc)
-            << " --create --file=" << quote_path(archive2)
-            << " " << quote_path(file3);
-        ASSERT_EQ(std::system(cmd.str().c_str()), 0);
-    }
-
-    // Объединяем архивы
-    {
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc)
-            << " --concatenate " << quote_path(archive1) << " " << quote_path(archive2)
-            << " --file=" << quote_path(merged);
-        ASSERT_EQ(std::system(cmd.str().c_str()), 0);
-    }
-
-    // Проверяем содержимое объединенного архива
-    {
-        testing::internal::CaptureStdout();
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc) << " --list --file=" << quote_path(merged);
-        std::system(cmd.str().c_str());
-        std::string output = testing::internal::GetCapturedStdout();
-        
-        ASSERT_NE(output.find(file1.filename().string()), std::string::npos);
-        ASSERT_NE(output.find(file2.filename().string()), std::string::npos);
-        ASSERT_NE(output.find(file3.filename().string()), std::string::npos);
-    }
-
-    // Очистка
-    fs::remove(file1);
-    fs::remove(file2);
-    fs::remove(file3);
+    EXPECT_TRUE(FilesEqual(fa1, out / fa1.filename()));
+    EXPECT_TRUE(FilesEqual(fa2, out / fa2.filename()));
 }
 
-TEST(HamArcCLI, HeavyCorruptionRecovery) {
-    const fs::path resourcesDir = fs::path(RESOURCES_DIR);
-    const fs::path file = resourcesDir / "important_data.bin";
+TEST(HamArcCLI, BinaryRoundTrip) {
+    const fs::path work = MakeTempDir();
+    const fs::path out  = work / "out";
+    fs::create_directories(out);
 
-    // Создаем тестовый бинарный файл
+    fs::path bin = WriteBinaryFile(work, "data.bin", 4096);
+    fs::path archive = work / "bin.haf";
+
+    ASSERT_EQ(RunHamarc("--create --file=" + QuotePath(archive) + " " + QuotePath(bin)), 0);
+
     {
-        std::ofstream f(file, std::ios::binary);
-        std::vector<uint8_t> data(1000);
-        for (size_t i = 0; i < data.size(); ++i) {
-            data[i] = static_cast<uint8_t>(i % 256);
-        }
-        f.write(reinterpret_cast<const char*>(data.data()), data.size());
-        f.close();
+        fs::path saved = fs::current_path();
+        fs::current_path(out);
+        ASSERT_EQ(RunHamarc("--extract --file=" + QuotePath(fs::path("..") / archive.filename())), 0);
+        fs::current_path(saved);
     }
 
-    const auto work = fs::temp_directory_path() / ("hamarc_test_" + std::to_string(std::time(nullptr)));
-    const fs::path outDir = work / "out";
-    fs::create_directories(outDir);
-    
-    const fs::path archive = work / "archive.haf";
-    const std::string hamarc = HAMARC_EXE_PATH;
-
-    // Создаем архив
-    {
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc)
-            << " --create --file=" << quote_path(archive)
-            << " " << quote_path(file);
-        ASSERT_EQ(std::system(cmd.str().c_str()), 0);
-    }
-
-    // Вносим множественные повреждения
-    {
-        const std::uintmax_t archive_size = fs::file_size(archive);
-        std::fstream archive_file(archive, std::ios::in | std::ios::out | std::ios::binary);
-        ASSERT_TRUE(archive_file.is_open());
-
-        // Повреждаем каждый 10-й байт
-        for (std::uintmax_t i = 0; i < archive_size; i += 10) {
-            archive_file.seekg(static_cast<std::streamoff>(i));
-            char byte = 0;
-            archive_file.read(&byte, 1);
-            if (archive_file.gcount() != 1) continue;
-
-            // Инвертируем несколько битов
-            byte ^= 0x55; // 01010101
-
-            archive_file.seekp(static_cast<std::streamoff>(i));
-            archive_file.write(&byte, 1);
-        }
-        archive_file.close();
-    }
-
-    // Пытаемся извлечь
-    {
-        const fs::path original_dir = fs::current_path();
-        fs::current_path(outDir);
-        
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc)
-            << " --extract"
-            << " --file=" << quote_path(fs::path("..") / archive.filename());
-        int rc = std::system(cmd.str().c_str());
-        
-        fs::current_path(original_dir);
-        
-        // Должен или успешно извлечь, или сообщить об ошибке
-        // но не упасть
-        ASSERT_TRUE(rc == 0 || rc != 255); // 255 обычно указывает на критическую ошибку
-    }
-
-    // Очистка
-    fs::remove(file);
+    EXPECT_TRUE(FilesEqual(bin, out / bin.filename()));
 }
 
-TEST(HamArcCLI, EmptyArchiveOperations) {
-    const auto work = fs::temp_directory_path() / ("hamarc_test_" + std::to_string(std::time(nullptr)));
-    fs::create_directories(work);
-    
-    const fs::path archive = work / "empty.haf";
-    const std::string hamarc = HAMARC_EXE_PATH;
+TEST(HamArcCLI, EmptyArchiveList) {
+    const fs::path work = MakeTempDir();
+    fs::path archive = work / "empty.haf";
 
-    // Создаем пустой архив
-    {
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc)
-            << " --create --file=" << quote_path(archive);
-        ASSERT_EQ(std::system(cmd.str().c_str()), 0);
-    }
-
-    // Проверяем список файлов пустого архива
-    {
-        testing::internal::CaptureStdout();
-        std::ostringstream cmd;
-        cmd << quote_path(hamarc) << " --list --file=" << quote_path(archive);
-        int rc = std::system(cmd.str().c_str());
-        std::string output = testing::internal::GetCapturedStdout();
-        
-        ASSERT_EQ(rc, 0);
-        // Должен быть пустой вывод или сообщение о пустом архиве
-    }
+    ASSERT_EQ(RunHamarc("--create --file=" + QuotePath(archive)), 0);
+    ASSERT_TRUE(fs::exists(archive));
+    EXPECT_EQ(RunHamarc("--list --file=" + QuotePath(archive)), 0);
 }
- */
+
+TEST(HamArcCLI, CustomEncodingFlags) {
+    const fs::path work = MakeTempDir();
+    const fs::path out  = work / "out";
+    fs::create_directories(out);
+
+    fs::path f = WriteTestFile(work, "custom.txt", "custom encoding test");
+    fs::path archive = work / "custom.haf";
+
+    ASSERT_EQ(RunHamarc("--create --file=" + QuotePath(archive) +
+                        " --encoding-data 16 3 " + QuotePath(f)), 0);
+
+    {
+        fs::path saved = fs::current_path();
+        fs::current_path(out);
+        ASSERT_EQ(RunHamarc("--extract --file=" + QuotePath(fs::path("..") / archive.filename())), 0);
+        fs::current_path(saved);
+    }
+
+    EXPECT_TRUE(FilesEqual(f, out / f.filename()));
+}

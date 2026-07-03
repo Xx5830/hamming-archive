@@ -10,25 +10,25 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-add_executable(
-    hamarc_tests
+# Создать директорию ресурсов при сборке
+file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/tests/resources)
+
+add_executable(hamarc_tests
     test_archiver.cpp
 )
 
-enable_testing()
-
-target_link_libraries(
-    hamarc_tests
+target_link_libraries(hamarc_tests
     PRIVATE
         GTest::gtest
         GTest::gtest_main
 )
 
-target_compile_definitions(
-    hamarc_tests
+target_compile_features(hamarc_tests PRIVATE cxx_std_23)
+
+target_compile_definitions(hamarc_tests
     PRIVATE
-        RESOURCES_DIR=\"${CMAKE_SOURCE_DIR}/tests/resources\"
-        HAMARC_EXE_PATH=\"$<TARGET_FILE:hamarc>\"
+        RESOURCES_DIR="${CMAKE_SOURCE_DIR}/tests/resources"
+        HAMARC_EXE_PATH="$<TARGET_FILE:hamarc>"
 )
 
 include(GoogleTest)

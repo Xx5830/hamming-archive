@@ -1,25 +1,38 @@
 #include "headers/argparser.hpp"
+#include <cstdlib>
+#include <stdexcept>
 
-std::string argparser::Parser::GetString(char *arr) {
-    std::string cu;
-    for (size_t index = 0; arr[index] != '\0'; index++) {
-        cu += arr[index];
-    }
+namespace argparser {
 
-    return cu;
+Parser::Parser()
+    : create(false), list(false), extract(false),
+      insert(false), erase(false), concatenate(false),
+      encoding_data(256, 1),
+      encoding_size_file(8, 1),
+      encoding_size_name_file(8, 1),
+      encoding_name_file(8, 1),
+      encoding_encoding_data_file(8, 1) {}
+
+std::string Parser::ArgToString(char* arr) {
+    return std::string(arr);
 }
 
-void argparser::Parser::Parse(size_t argc, char **argv) {
-    for (size_t index = 1; index < argc; index++) {
-        std::string cu = GetString(argv[index]);
+managefile::Hamarc::EncodingInfo Parser::ParseEncodingArg(int& index, int argc, char** argv) {
+    if (index + 2 >= argc) {
+        throw std::invalid_argument("encoding flag requires two arguments: <bits> <copies>");
+    }
+    size_t bits   = static_cast<size_t>(std::atoll(argv[index + 1]));
+    size_t copies = static_cast<size_t>(std::atoll(argv[index + 2]));
+    index += 2;
+    return managefile::Hamarc::EncodingInfo(bits, static_cast<uint32_t>(copies));
+}
+
+void Parser::Parse(int argc, char** argv) {
+    for (int index = 1; index < argc; ++index) {
+        std::string cu = ArgToString(argv[index]);
 
         if (cu == "-c" || cu == "--create") {
             create = true;
-        } else if (cu == "-f" || cu == "--file") {
-            archive = GetString(argv[index + 1]);
-            ++index;
-        } else if ((cu.size() > 7 && cu.substr(0, 7) == "--file=")) {
-            archive = cu.substr(7, cu.size() - 7);
         } else if (cu == "-l" || cu == "--list") {
             list = true;
         } else if (cu == "-x" || cu == "--extract") {
@@ -30,37 +43,27 @@ void argparser::Parser::Parse(size_t argc, char **argv) {
             erase = true;
         } else if (cu == "-A" || cu == "--concatenate") {
             concatenate = true;
-        } else if (cu == "-c-d" || cu == "--encoding-data") {
-            size_t count_bit = atoll(argv[index + 1]);
-            size_t count_copy = atoll(argv[index + 2]);
-            encoding_data = managefile::Hamarc::EncodingInfo(count_bit, count_copy);
-            index += 2;
-        } else if (cu == "-c-sf" || cu == "--encoding-size-file") {
-            size_t count_bit = atoll(argv[index + 1]);
-            size_t count_copy = atoll(argv[index + 2]);
-            encoding_size_file = managefile::Hamarc::EncodingInfo(count_bit, count_copy);
-            index += 2;
-        } else if (cu == "-c-snf" || cu == "--encoding-size-name-file") {
-            size_t count_bit = atoll(argv[index + 1]);
-            size_t count_copy = atoll(argv[index + 2]);
-            encoding_size_name_file = managefile::Hamarc::EncodingInfo(count_bit, count_copy);
-            index += 2;
-        } else if (cu == "-c-nf" || cu == "--encoding-name-file") {
-            size_t count_bit = atoll(argv[index + 1]);
-            size_t count_copy = atoll(argv[index + 2]);
-            encoding_name_file = managefile::Hamarc::EncodingInfo(count_bit, count_copy);
-            index += 2;
-        } else if (cu == "-c-edf" || cu == "--encoding-encoding-data-file") {
-            size_t count_bit = atoll(argv[index + 1]);
-            size_t count_copy = atoll(argv[index + 2]);
-            encoding_encoding_data_file = managefile::Hamarc::EncodingInfo(count_bit, count_copy);
-            index += 2;
+
+        } else if (cu == "-f" || cu == "--file") {
+            if (index + 1 < argc) {
+                archive = ArgToString(argv[++index]);
+            }
+        } else if (cu.size() > 7 && cu.substr(0, 7) == "--file=") {
+            archive = cu.substr(7);
+
+        } else if (cu == "--encoding-data"      || cu == "-e-d") {
+            encoding_data = ParseEncodingArg(index, argc, argv);
+        } else if (cu == "--encoding-size-file" || cu == "-e-sf") {
+            encoding_size_file = ParseEncodingArg(index, argc, argv);
+        } else if (cu == "--encoding-size-name" || cu == "-e-sn") {
+            encoding_size_name_file = ParseEncodingArg(index, argc, argv);
+        } else if (cu == "--encoding-name"      || cu == "-e-nf") {
+            encoding_name_file = ParseEncodingArg(index, argc, argv);
+        } else if (cu == "--encoding-meta"      || cu == "-e-m") {
+            encoding_encoding_data_file = ParseEncodingArg(index, argc, argv);
+
         } else {
-<<<<<<< HEAD
-            if (cu.size() > 3 && cu.substr(cu.size() - 3, 3) == ".haf") {
-=======
-            if (cu.size() > 3 && cu.substr(cu.size() - 4, 4) == ".haf") {
->>>>>>> d6641a0 (synch)
+            if (cu.size() > 4 && cu.substr(cu.size() - 4) == ".haf") {
                 archives.push_back(cu);
             } else {
                 files.push_back(cu);
@@ -68,3 +71,5 @@ void argparser::Parser::Parse(size_t argc, char **argv) {
         }
     }
 }
+
+} // namespace argparser

@@ -1,5 +1,9 @@
+name: CI/CD
+
 on:
-  pull_request_target:
+  pull_request:
+    branches: ["main"]
+  push:
     branches: ["main"]
 
 jobs:
@@ -95,13 +99,11 @@ jobs:
     permissions:
       pull-requests: write
     uses: is-itmo-c-25/cicd/.github/workflows/report.yml@v1
-    needs: [ tests, quality ]
+    needs: [tests, quality]
     with:
       runs-on: itmogus
-
       tests: ${{ needs.tests.outputs.results }}
       codestyle: ${{ needs.quality.outputs.codestyle }}
       coverage: ${{ needs.quality.outputs.coverage }}
-
       config_tests: ${{ needs.tests.outputs.config }}
       config_quality: ${{ needs.quality.outputs.config }}

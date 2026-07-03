@@ -1,108 +1,121 @@
 #include "headers/manager_files.hpp"
-#include <sys/stat.h>
 
-managefile::File::File() {}
+managefile::File::File()
+    : delete_on_close_(false) {}
 
 void managefile::File::Open(bool create_if_not_exists, bool need_clear_on_open) {
     if (!std::filesystem::exists(FilePath()) && create_if_not_exists) {
-        if (Directories().size() != 0) {
+        if (!Directories().empty()) {
             std::filesystem::create_directories(Directories());
         }
-
         std::ofstream(FilePath(), std::ios::out).close();
     }
 
+    auto mode = std::ios::in | std::ios::out | std::ios::binary;
     if (need_clear_on_open) {
-        stream = std::fstream{FilePath(), std::ios::in | std::ios::out | std::ios::binary | std::ios::trunc};
-    } else {
-        stream = std::fstream{FilePath(), std::ios::in | std::ios::out | std::ios::binary};
+        mode |= std::ios::trunc;
     }
+    stream_ = std::fstream{FilePath(), mode};
 }
 
-managefile::File::File(const std::string &file_path, bool create_if_not_exists, bool delete_on_close,
-                                bool need_clear_on_open) {
+managefile::File::File(const std::string& file_path, bool create_if_not_exists,
+                       bool delete_on_close, bool need_clear_on_open)
+    : delete_on_close_(delete_on_close) {
     ssize_t pos_slash = -1;
     ssize_t pos_point = -1;
 
-    for (size_t index = 0; index < file_path.size(); index++) {
-        if (file_path[index] == '/') {
-            pos_slash = index;
-        } else if (pos_point == -1 && file_path[index] == '.') {
-            pos_point = index;
+    for (size_t i = 0; i < file_path.size(); ++i) {
+        if (file_path[i] == '/') {
+            pos_slash = static_cast<ssize_t>(i);
+        } else if (pos_point == -1 && file_path[i] == '.') {
+            pos_point = static_cast<ssize_t>(i);
         }
     }
 
-    this->file_path = file_path;
+    file_path_ = file_path;
 
     if (pos_slash != -1) {
-        directories_path = file_path.substr(0, pos_slash);
+        directories_path_ = file_path.substr(0, pos_slash);
     }
     if (pos_point != -1) {
-        format = file_path.substr(pos_point + 1, file_path.size() - pos_point - 1);
+        format_ = file_path.substr(pos_point + 1);
     }
 
-    if (pos_point == -1) {
-        pos_point = file_path.size();
-    }
+    ssize_t effective_point = (pos_point == -1)
+        ? static_cast<ssize_t>(file_path.size())
+        : pos_point;
 
-    name = file_path.substr(pos_slash + 1, pos_point - pos_slash - 1);
+    name_ = file_path.substr(pos_slash + 1, effective_point - pos_slash - 1);
 
-    this->delete_on_close = delete_on_close;
     Open(create_if_not_exists, need_clear_on_open);
 }
 
-managefile::File::File(File &&other) { *this = std::move(other); }
+managefile::File::File(File&& other) {
+    *this = std::move(other);
+}
 
-managefile::File &managefile::File::operator=(File &&other) {
-    if (IsOpen()) {
-        stream.close();
+managefile::File& managefile::File::operator=(File&& other) {
+    if (this == &other) {
+        return *this;
     }
-
-    this->file_path = std::move(other.file_path);
-    this->name = std::move(other.name);
-    this->directories_path = std::move(other.directories_path);
-    this->format = std::move(other.format);
-    stream = std::move(other.stream);
-    this->delete_on_close = other.delete_on_close;
-    other.delete_on_close = false;
-
+    if (IsOpen()) {
+        stream_.close();
+    }
+    file_path_       = std::move(other.file_path_);
+    name_            = std::move(other.name_);
+    directories_path_ = std::move(other.directories_path_);
+    format_          = std::move(other.format_);
+    stream_          = std::move(other.stream_);
+    delete_on_close_ = other.delete_on_close_;
+    other.delete_on_close_ = false;
     return *this;
 }
 
-void managefile::File::Close() { stream.close(); }
+void managefile::File::Close() {
+    stream_.close();
+}
 
-bool managefile::File::IsOpen() const { return stream.is_open(); }
+bool managefile::File::IsOpen() const {
+    return stream_.is_open();
+}
 
-bool managefile::File::IsEOF() const { return stream.eof(); }
+bool managefile::File::IsEOF() const {
+    return stream_.eof();
+}
 
-void managefile::File::ClearEOF() {stream.clear();}
+void managefile::File::ClearEOF() {
+    stream_.clear();
+}
 
-std::string managefile::File::Name() const { return name; }
+std::string managefile::File::Name() const { return name_; }
+std::string managefile::File::Directories() const { return directories_path_; }
+std::string managefile::File::Format() const { return format_; }
+std::string managefile::File::FilePath() const { return file_path_; }
 
-std::string managefile::File::Directories() const { return directories_path; }
+ssize_t managefile::File::Pos() {
+    return static_cast<ssize_t>(stream_.tellg());
+}
 
-std::string managefile::File::Format() const { return format; }
+size_t managefile::File::GCount() const {
+    return static_cast<size_t>(stream_.gcount());
+}
 
-std::string managefile::File::FilePath() const { return file_path; }
+size_t managefile::File::Length() const {
+    return std::filesystem::file_size(FilePath());
+}
 
-ssize_t managefile::File::Pos() { return stream.tellg(); }
+void managefile::File::MakeTemp() {
+    delete_on_close_ = true;
+}
 
-size_t managefile::File::GCount() const { return stream.gcount(); }
+void managefile::File::UnMakeTemp() {
+    delete_on_close_ = false;
+}
 
-size_t managefile::File::Length() const { return std::filesystem::file_size(FilePath()); }
-
-<<<<<<< HEAD
-=======
-void managefile::File::MakeTemp() {delete_on_close = true;}
-
-void managefile::File::UnMakeTemp() {delete_on_close = false;}
-
->>>>>>> d6641a0 (synch)
 std::vector<char> managefile::File::Read(size_t read_size) {
-    std::vector <char> current(read_size);
-
-    if (read_size > 0){
-        stream.read(&current[0], read_size);
+    std::vector<char> current(read_size);
+    if (read_size > 0) {
+        stream_.read(current.data(), static_cast<std::streamsize>(read_size));
         current.resize(GCount());
     }
     return current;
@@ -110,102 +123,98 @@ std::vector<char> managefile::File::Read(size_t read_size) {
 
 std::vector<char> managefile::File::ReadPos(size_t pos, size_t read_size) {
     SetPos(pos);
-    std::vector<char> current = Read(read_size);
-    return current;
+    return Read(read_size);
 }
 
-void managefile::File::Write(const std::span<char> data) {
-    stream.write(&data[0], data.size());
+void managefile::File::Write(std::span<const char> data) {
+    stream_.write(data.data(), static_cast<std::streamsize>(data.size()));
 }
 
-void managefile::File::Write(File &other, size_t buff_size) {
+void managefile::File::Write(File& other, size_t buff_size) {
     other.SetBegin();
-    while (!other.IsEOF()){
-        std::vector <char> buff = other.Read(buff_size);
+    while (!other.IsEOF()) {
+        std::vector<char> buff = other.Read(buff_size);
         Write(buff);
     }
 }
 
-void managefile::File::WritePos(size_t pos, const std::span<char> data) {
+void managefile::File::WritePos(size_t pos, std::span<const char> data) {
     SetPos(pos);
     Write(data);
 }
 
-void managefile::File::WritePos(size_t pos, File &other, size_t buff_size) {
+void managefile::File::WritePos(size_t pos, File& other, size_t buff_size) {
     SetPos(pos);
     Write(other, buff_size);
 }
 
 void managefile::File::SetPos(size_t index) {
-    if (IsEOF()){
+    if (IsEOF()) {
         ClearEOF();
     }
-
-    stream.seekg(index, std::ios::beg);
+    stream_.seekg(static_cast<std::streamoff>(index), std::ios::beg);
+    stream_.seekp(static_cast<std::streamoff>(index), std::ios::beg);
 }
 
 void managefile::File::SetBegin() {
-    if (IsEOF()){
+    if (IsEOF()) {
         ClearEOF();
     }
-
-    stream.seekg(0, std::ios::beg);
+    stream_.seekg(0, std::ios::beg);
+    stream_.seekp(0, std::ios::beg);
 }
 
 void managefile::File::SetEnd() {
-    if (IsEOF()){
+    if (IsEOF()) {
         ClearEOF();
     }
-
-    stream.seekg(0, std::ios::end);
+    stream_.seekg(0, std::ios::end);
+    stream_.seekp(0, std::ios::end);
 }
 
-void managefile::File::MovePos(ssize_t move_size){
-    if (IsEOF()){
+void managefile::File::MovePos(ssize_t move_size) {
+    if (IsEOF()) {
         ClearEOF();
     }
-
-    stream.seekg(move_size, std::ios::cur);
+    stream_.seekg(move_size, std::ios::cur);
+    stream_.seekp(move_size, std::ios::cur);
 }
 
-void managefile::File::PushBack(const std::span<char> data, size_t buff_size) {
+void managefile::File::PushBack(std::span<const char> data, size_t /*buff_size*/) {
     SetEnd();
     Write(data);
 }
 
-void managefile::File::PushBack(File &other, size_t buff_size) {
-    std::vector<char> buff(buff_size);
+void managefile::File::PushBack(File& other, size_t buff_size) {
     other.SetPos(0);
-
     while (!other.IsEOF()) {
-        buff = other.Read(buff_size);
-        PushBack(buff, other.GCount());
+        std::vector<char> buff = other.Read(buff_size);
+        if (!buff.empty()) {
+            PushBack(buff);
+        }
     }
 }
 
-void managefile::File::Insert(size_t pos, const std::span<char> data, size_t buff_size) {
+void managefile::File::Insert(size_t pos, std::span<const char> data, size_t buff_size) {
     File temp_file = CreateTempFile();
-    temp_file.SetBegin();
     SetPos(pos);
 
     while (!IsEOF()) {
         std::vector<char> buff = Read(buff_size);
-        size_t count_symbol = GCount();
-        temp_file.PushBack(buff, count_symbol);
+        temp_file.PushBack(buff);
     }
 
     WritePos(pos, data);
     Write(temp_file, buff_size);
 }
 
-void managefile::File::Insert(size_t pos, File &other, size_t buff_size) {
+void managefile::File::Insert(size_t pos, File& other, size_t buff_size) {
     File temp_file = CreateTempFile();
-    temp_file.SetBegin();
     SetPos(pos);
 
     while (!IsEOF()) {
-        std::vector <char> buff = Read(buff_size);
-        temp_file.PushBack(buff, buff.size());
+        std::vector<char> buff = Read(buff_size);
+        temp_file.PushBack(buff);
     }
 
     WritePos(pos, other, buff_size);
@@ -213,63 +222,53 @@ void managefile::File::Insert(size_t pos, File &other, size_t buff_size) {
 }
 
 void managefile::File::PopBack(size_t delete_size) {
-    if (delete_size > Length()){
-        delete_size = Length();
+    size_t len = Length();
+    if (delete_size > len) {
+        delete_size = len;
     }
-    std::filesystem::resize_file(FilePath(), Length() - delete_size);
+    std::filesystem::resize_file(FilePath(), len - delete_size);
 }
 
 void managefile::File::Erase(size_t pos, size_t delete_size, size_t buff_size) {
-    SetPos(0);
     File temp_file = CreateTempFile();
-    
-    while (!IsEOF() && Pos() < pos) {
-        std::vector <char> buff;
-        if (pos - Pos() > buff_size) {
-            buff = Read(buff_size);
-        } else {
-            buff = Read(pos - Pos());
-        }
 
-        temp_file.PushBack(buff, buff.size());
+    SetPos(0);
+    while (!IsEOF() && static_cast<size_t>(Pos()) < pos) {
+        size_t to_read = std::min(buff_size, pos - static_cast<size_t>(Pos()));
+        std::vector<char> buff = Read(to_read);
+        temp_file.PushBack(buff);
     }
 
-    MovePos(delete_size);
+    MovePos(static_cast<ssize_t>(delete_size));
 
     while (!IsEOF()) {
-        std::vector <char> buff = Read(buff_size);
-
-        temp_file.PushBack(buff, buff.size());
+        std::vector<char> buff = Read(buff_size);
+        temp_file.PushBack(buff);
     }
 
-    temp_file.SetPos(0);
     Close();
-    Open(0, 1);
-
+    Open(false, true);
     PushBack(temp_file, buff_size);
 }
 
 void managefile::File::Delete() {
     Close();
-    std::remove((FilePath()).c_str());
+    std::filesystem::remove(FilePath());
 }
 
 managefile::File managefile::File::CreateTempFile() {
-    std::string name = "current";
-    std::string result_name = name + ".tmp";
+    const std::string base = "hamarc_tmp";
+    std::string result_name;
+    size_t number = 0;
+    do {
+        result_name = base + std::to_string(number++) + ".tmp";
+    } while (std::filesystem::exists(result_name));
 
-    size_t number = 1;
-    while (std::filesystem::exists(result_name)) {
-        result_name = name + std::to_string(number) + ".tmp";
-    }
-
-    File result(name + std::to_string(number) + ".tmp", true, true);
-
-    return result;
+    return File(result_name, true, true);
 }
 
 managefile::File::~File() {
-    if (delete_on_close) {
+    if (delete_on_close_) {
         Delete();
     } else {
         Close();

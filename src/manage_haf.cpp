@@ -2,784 +2,704 @@
 #include <algorithm>
 #include <iostream>
 
-managefile::Hamarc::EncodingInfo::EncodingInfo(uint64_t count_bit, uint32_t count_copy) {
-    size_t count_additional_bits = 0;
+// ---------------------------------------------------------------------------
+// EncodingInfo
+// ---------------------------------------------------------------------------
 
-    while ((1 << count_additional_bits) <= count_bit + count_additional_bits) {
+managefile::Hamarc::EncodingInfo::EncodingInfo(uint64_t count_bit, uint32_t copy_count) {
+    size_t count_additional_bits = 0;
+    while ((1ULL << count_additional_bits) <= count_bit + count_additional_bits) {
         ++count_additional_bits;
     }
 
-    count_data_bits = count_bit;
-    count_data_bytes = count_bit / 8 + (count_bit % 8 != 0 ? 1 : 0);
-    count_hemming_bits = count_additional_bits;
+    count_data_bits      = count_bit;
+    count_data_bytes     = count_bit / 8 + (count_bit % 8 != 0 ? 1 : 0);
+    count_hemming_bits   = count_additional_bits;
     count_additional_bytes = count_additional_bits / 8 + 1;
     if (count_data_bits % 8 + count_additional_bits % 8 > 8) {
         ++count_additional_bytes;
     }
-    this->count_copy = count_copy;
+    count_copy = static_cast<uint8_t>(copy_count);
 }
 
 managefile::Hamarc::EncodingInfo::EncodingInfo(std::span<char> arr) {
-    size_t count_bit = 0;
-    size_t count_copy = 0;
-
-    for (size_t index = 0; index < 7; index++) {
-        count_bit += static_cast<uint64_t>(arr[index]) << (48 - index * 8);
+    uint64_t count_bit = 0;
+    for (size_t i = 0; i < 7; ++i) {
+        count_bit += static_cast<uint64_t>(static_cast<uint8_t>(arr[i])) << (48 - i * 8);
     }
-    count_copy = arr[7];
-
-    *this = EncodingInfo(count_bit, count_copy);
+    uint64_t copy_count = static_cast<uint8_t>(arr[7]);
+    *this = EncodingInfo(count_bit, static_cast<uint32_t>(copy_count));
 }
 
-managefile::Hamarc::EncodingInfo::EncodingInfo() {}
+managefile::Hamarc::EncodingInfo::EncodingInfo()
+    : count_data_bits(0), count_data_bytes(0),
+      count_hemming_bits(0), count_additional_bytes(0), count_copy(0) {}
 
-uint32_t managefile::Hamarc::EncodingInfo::ToInt() const { return (count_data_bits << 8) + (count_copy & 0b11111111); }
+uint32_t managefile::Hamarc::EncodingInfo::ToInt() const {
+    return static_cast<uint32_t>((count_data_bits << 8) + (count_copy & 0xFF));
+}
 
 bool managefile::Hamarc::EncodingInfo::operator==(const EncodingInfo& other) const {
-    return count_data_bits == other.count_data_bits && count_data_bytes == other.count_data_bytes &&
-           count_additional_bytes == other.count_additional_bytes && count_hemming_bits == other.count_hemming_bits &&
-           count_copy == other.count_copy;
+    return count_data_bits      == other.count_data_bits
+        && count_data_bytes     == other.count_data_bytes
+        && count_additional_bytes == other.count_additional_bytes
+        && count_hemming_bits   == other.count_hemming_bits
+        && count_copy           == other.count_copy;
 }
 
+// ---------------------------------------------------------------------------
+// ConfigEncodingFile
+// ---------------------------------------------------------------------------
+
 bool managefile::Hamarc::ConfigEncodingFile::operator==(const ConfigEncodingFile& other) const {
-    return size_file == other.size_file && size_name_file == other.size_name_file && name_file == other.name_file &&
-           encoding_data_file == other.encoding_data_file;
+    return size_file           == other.size_file
+        && size_name_file      == other.size_name_file
+        && name_file           == other.name_file
+        && encoding_data_file  == other.encoding_data_file;
 }
 
 managefile::Hamarc::ConfigEncodingFile::ConfigEncodingFile()
     : size_file(8, 1), size_name_file(8, 1), name_file(8, 1), encoding_data_file(8, 1) {}
 
-managefile::Hamarc::ConfigEncodingFile::ConfigEncodingFile(EncodingInfo size_file, EncodingInfo size_name_file,
-                                                           EncodingInfo name_file, EncodingInfo encoding_data_file)
-    : size_file(size_file), size_name_file(size_name_file), name_file(name_file),
-      encoding_data_file(encoding_data_file) {}
+managefile::Hamarc::ConfigEncodingFile::ConfigEncodingFile(EncodingInfo sf, EncodingInfo snf,
+                                                           EncodingInfo nf, EncodingInfo edf)
+    : size_file(sf), size_name_file(snf), name_file(nf), encoding_data_file(edf) {}
 
-managefile::Hamarc::ConfigEncodingFile::ConfigEncodingFile(const std::span<char>& arr) {
-    for (size_t start_index = 0; start_index < arr.size(); start_index += 8) {
-        char current[8];
-        for (size_t index = start_index; index < start_index + 8; index++) {
-            current[index - start_index] = arr[index];
+managefile::Hamarc::ConfigEncodingFile::ConfigEncodingFile(std::span<char> arr) {
+    auto read8 = [&](size_t offset) {
+        char buf[8];
+        for (size_t i = 0; i < 8; ++i) {
+            buf[i] = arr[offset + i];
         }
-
-        if (start_index == 0) {
-            size_file = EncodingInfo(current);
-        } else if (start_index == 8) {
-            size_name_file = EncodingInfo(current);
-        } else if (start_index == 16) {
-            name_file = EncodingInfo(current);
-        } else if (start_index == 24) {
-            encoding_data_file = EncodingInfo(current);
-        }
-    }
+        return EncodingInfo(std::span<char>{buf, 8});
+    };
+    size_file          = read8(0);
+    size_name_file     = read8(8);
+    name_file          = read8(16);
+    encoding_data_file = read8(24);
 }
 
-managefile::Hamarc::Hat::Hat(std::span<char> size_file, std::span<char> size_name_file, std::span<char> name_file,
-                             std::span<char> encoding_data_file) {
-    this->size_file = 0;
-    for (size_t index = 0; index < size_file.size(); index++) {
-        size_t shift = ((size_file.size() - index - 1) * 8);
-        uint64_t value = static_cast<uint8_t>(size_file[index]);
-        value <<= shift;
-        this->size_file += value;
-    }
+// ---------------------------------------------------------------------------
+// Hat
+// ---------------------------------------------------------------------------
 
-    this->size_name_file = 0;
-    for (size_t index = 0; index < size_name_file.size(); index++) {
-        size_t shift = ((size_name_file.size() - index - 1) * 8);
-        uint64_t value = static_cast<uint8_t>(size_name_file[index]);
-        value <<= shift;
-        this->size_name_file += value;
+static uint64_t SpanToUint64(std::span<char> s) {
+    uint64_t v = 0;
+    for (size_t i = 0; i < s.size(); ++i) {
+        v = (v << 8) | static_cast<uint8_t>(s[i]);
     }
-
-    for (size_t index = 0; index < name_file.size(); index++) {
-        this->name_file += name_file[index];
-    }
-
-    this->encoding_data_file = 0;
-    for (size_t index = 0; index < encoding_data_file.size(); index++) {
-        size_t shift = ((encoding_data_file.size() - index - 1) * 8);
-        uint64_t value = static_cast<uint8_t>(encoding_data_file[index]);
-        value <<= shift;
-        this->encoding_data_file += value;
-    }
+    return v;
 }
 
-managefile::Hamarc::Hat::Hat() {}
+static uint32_t SpanToUint32(std::span<char> s) {
+    uint32_t v = 0;
+    for (size_t i = 0; i < s.size(); ++i) {
+        v = (v << 8) | static_cast<uint8_t>(s[i]);
+    }
+    return v;
+}
 
-std::vector<char> managefile::Hamarc::IntegralToVectorCHar(long long num, size_t count_byte) const {
-    std::vector<char> result;
+managefile::Hamarc::Hat::Hat(std::span<char> sf, std::span<char> snf,
+                             std::span<char> nf, std::span<char> edf) {
+    size_file      = SpanToUint64(sf);
+    size_name_file = SpanToUint32(snf);
+    name_file      = std::string(nf.data(), nf.size());
+    encoding_data_file = SpanToUint64(edf);
+}
 
-    while (result.size() < count_byte) {
-        result.push_back(static_cast<char>(num & 0b11111111));
+managefile::Hamarc::Hat::Hat()
+    : size_file(0), size_name_file(0), encoding_data_file(0) {}
+
+// ---------------------------------------------------------------------------
+// Hamarc private helpers
+// ---------------------------------------------------------------------------
+
+std::vector<char> managefile::Hamarc::IntegralToVectorChar(long long num, size_t count_byte) const {
+    std::vector<char> result(count_byte);
+    for (size_t i = count_byte; i-- > 0;) {
+        result[i] = static_cast<char>(num & 0xFF);
         num >>= 8;
     }
-
-    std::reverse(result.begin(), result.end());
-
     return result;
 }
 
-std::vector<uint8_t> managefile::Hamarc::HemmingBytes(const std::span<char> data,
-                                                      const EncodingInfo& encoding_info) const {
-    std::vector<uint8_t> EncodingBytes(encoding_info.count_additional_bytes +
-                                       (encoding_info.count_data_bits % 8 != 0 ? 1 : 0));
+std::vector<uint8_t> managefile::Hamarc::HemmingBytes(std::span<char> data,
+                                                       const EncodingInfo& info) const {
+    std::vector<uint8_t> hbytes(info.count_additional_bytes +
+                                (info.count_data_bits % 8 != 0 ? 1 : 0), 0);
+
+    auto xor_bit_into_hbytes = [&](size_t pos_1indexed) {
+        for (size_t b = 0; b < 8 * hbytes.size(); ++b) {
+            if (pos_1indexed & (1ULL << b)) {
+                hbytes[b / 8] ^= static_cast<uint8_t>(1 << (b % 8));
+            }
+        }
+    };
 
     size_t p = 0;
-    for (size_t index_byte = 0; index_byte < data.size() - 1; index_byte++) {
-        for (size_t index_bit = 0; index_bit < 8; index_bit++) {
-            size_t pos = index_byte * 8 + index_bit + p + 1;
-            while (pos == (1 << p)) {
-                ++p;
-                ++pos;
-            }
-
-            if (data[index_byte] & (1 << index_bit)) {
-                for (size_t index_bit2 = 0; index_bit2 < 8 * EncodingBytes.size(); index_bit2++) {
-                    if (pos & (1 << index_bit2)) {
-                        uint8_t index_byte2 = index_bit2 / 8;
-                        uint8_t ost = index_bit2 - index_byte2 * 8;
-                        EncodingBytes[index_byte2] ^= (1 << ost);
-                    }
-                }
+    // full bytes
+    for (size_t ib = 0; ib + 1 < data.size(); ++ib) {
+        for (size_t bit = 0; bit < 8; ++bit) {
+            size_t pos = ib * 8 + bit + p + 1;
+            while (pos == (1ULL << p)) { ++p; ++pos; }
+            if (data[ib] & (1 << bit)) {
+                xor_bit_into_hbytes(pos);
             }
         }
     }
-    size_t ost_bits = encoding_info.count_data_bits % 8;
-    if (ost_bits == 0) {
-        ost_bits = 8;
-    }
-    for (size_t index_bit = 0; index_bit < ost_bits; index_bit++) {
-        size_t pos = (data.size() - 1) * 8 + index_bit + p + 1;
-        while (pos == (1 << p)) {
-            ++p;
-            ++pos;
-        }
-
-        if (data[data.size() - 1] & (1 << index_bit)) {
-            for (size_t index_bit2 = 0; index_bit2 < 8 * EncodingBytes.size(); index_bit2++) {
-                if (pos & (1 << index_bit2)) {
-                    uint8_t index_byte2 = index_bit2 / 8;
-                    uint8_t ost = index_bit2 - index_byte2 * 8;
-                    EncodingBytes[index_byte2] ^= (1 << ost);
-                }
-            }
+    // last (possibly partial) byte
+    size_t ost_bits = info.count_data_bits % 8;
+    if (ost_bits == 0) ost_bits = 8;
+    size_t last = data.size() - 1;
+    for (size_t bit = 0; bit < ost_bits; ++bit) {
+        size_t pos = last * 8 + bit + p + 1;
+        while (pos == (1ULL << p)) { ++p; ++pos; }
+        if (data[last] & (1 << bit)) {
+            xor_bit_into_hbytes(pos);
         }
     }
 
-    return EncodingBytes;
+    return hbytes;
 }
 
-std::vector<char> managefile::Hamarc::EncodeBlock(const std::span<char> block,
-                                                  const EncodingInfo& encoding_info) const {
-    std::vector<char> result(block.size());
+std::vector<char> managefile::Hamarc::EncodeBlock(std::span<char> block,
+                                                   const EncodingInfo& info) const {
+    std::vector<char> result(block.begin(), block.end());
 
-    for (size_t index = 0; index < block.size(); index++) {
-        result[index] = block[index];
+    std::vector<uint8_t> hbytes = HemmingBytes(result, info);
+    size_t ih = 0; // index into hbytes bit stream
+
+    // Pack Hamming bits after data bits in last data byte
+    for (size_t bit = info.count_data_bits % 8;
+         bit != 0 && bit < 8 && ih < info.count_hemming_bits; ++bit, ++ih) {
+        uint8_t hbit = (hbytes[ih / 8] >> (ih % 8)) & 1;
+        result.back() = static_cast<char>(
+            static_cast<uint8_t>(result.back()) | (hbit << bit));
     }
 
-    std::vector<uint8_t> hemming_bytes = HemmingBytes(result, encoding_info);
-    size_t index_hemming_bit = 0;
-
-    for (size_t index_bit = encoding_info.count_data_bits % 8;
-         index_bit != 0 && index_bit < 8 && index_hemming_bit < encoding_info.count_hemming_bits;
-         index_bit++, index_hemming_bit++) {
-        uint8_t bit = hemming_bytes[0] & (1 << index_hemming_bit);
-        uint8_t shift = index_bit - index_hemming_bit;
-        result[result.size() - 1] |= bit << shift;
-    }
-
-    while (index_hemming_bit < encoding_info.count_hemming_bits) {
+    // Remaining Hamming bits in extra bytes
+    while (ih < info.count_hemming_bits) {
         result.push_back(0);
-        for (size_t bit_result = 0; bit_result < 8 && index_hemming_bit < encoding_info.count_hemming_bits;
-             bit_result++, index_hemming_bit++) {
-            uint8_t bit = hemming_bytes[index_hemming_bit / 8] & (1 << (index_hemming_bit % 8));
-
-            if (index_hemming_bit % 8 >= bit_result) {
-                uint8_t shift = (index_hemming_bit % 8) - bit_result;
-                result.back() |= bit >> shift;
-            } else {
-                uint8_t shift = bit_result - (index_hemming_bit % 8);
-                result.back() |= bit << shift;
-            }
+        for (size_t bit = 0; bit < 8 && ih < info.count_hemming_bits; ++bit, ++ih) {
+            uint8_t hbit = (hbytes[ih / 8] >> (ih % 8)) & 1;
+            result.back() = static_cast<char>(
+                static_cast<uint8_t>(result.back()) | (hbit << bit));
         }
     }
 
-    std::vector<char> current = result;
+    // Replicate count_copy times
+    std::vector<char> copy = result;
     result.clear();
-    for (size_t index_copy = 0; index_copy < encoding_info.count_copy; index_copy++) {
-        for (size_t index = 0; index < current.size(); index++) {
-            result.push_back(current[index]);
-        }
+    for (size_t c = 0; c < info.count_copy; ++c) {
+        result.insert(result.end(), copy.begin(), copy.end());
     }
-
     return result;
 }
 
-std::vector<char> managefile::Hamarc::EncodeData(const std::span<char> data, const EncodingInfo& encoding_info) const {
-    struct ReadMachine {
-        std::vector<char> current;
+std::vector<char> managefile::Hamarc::EncodeData(std::span<char> data,
+                                                   const EncodingInfo& info) const {
+    // Split data into blocks of count_data_bits bits
+    struct Splitter {
         std::vector<std::vector<char>> blocks;
-        size_t current_bit = 0;
-        size_t bit_size_block;
+        std::vector<char> current;
+        size_t cur_bit = 0;
+        size_t block_bits;
 
-        std::vector<std::vector<char>> GetResult() {
-            if (current.size() != 0) {
-                blocks.push_back(current);
-            }
+        explicit Splitter(size_t bb) : block_bits(bb) {}
 
-            return blocks;
-        }
-        void Read(std::span<char> data) {
-            for (size_t index = 0; index < data.size(); index++) {
-                for (size_t data_bit = 0; data_bit < 8; data_bit++, current_bit++) {
-                    if (current_bit == bit_size_block) {
-                        blocks.push_back(current);
+        void Feed(std::span<char> d) {
+            for (char byte : d) {
+                for (size_t b = 0; b < 8; ++b, ++cur_bit) {
+                    if (cur_bit == block_bits) {
+                        blocks.push_back(std::move(current));
                         current.clear();
-                        current_bit = 0;
+                        cur_bit = 0;
                     }
-                    if (current_bit % 8 == 0) {
-                        current.push_back(static_cast<char>(0));
+                    if (cur_bit % 8 == 0) {
+                        current.push_back(0);
                     }
-                    uint8_t value = data[index] & (1 << data_bit);
-
-                    if (value) {
-                        current[current_bit / 8] += 1 << (current_bit % 8);
+                    if (byte & (1 << b)) {
+                        current.back() = static_cast<char>(
+                            static_cast<uint8_t>(current.back()) | (1 << (cur_bit % 8)));
                     }
                 }
             }
         }
 
-        ReadMachine(size_t bit_size_block) { this->bit_size_block = bit_size_block; }
-    };
-    std::vector<char> result;
-
-    ReadMachine read_machine(encoding_info.count_data_bits);
-
-    read_machine.Read(data);
-    std::vector<std::vector<char>> blocks = read_machine.GetResult();
-
-    while (blocks.back().size() != encoding_info.count_data_bytes) {
-        blocks.back().push_back(static_cast<char>(0));
-    }
-
-    for (size_t index = 0; index < blocks.size(); index++) {
-        std::vector<char> encode_block = EncodeBlock(blocks[index], encoding_info);
-
-        for (size_t index = 0; index < encode_block.size(); index++) {
-            result.push_back(encode_block[index]);
+        std::vector<std::vector<char>> Finish(size_t count_data_bytes) {
+            if (!current.empty()) {
+                blocks.push_back(std::move(current));
+            }
+            while (blocks.back().size() < count_data_bytes) {
+                blocks.back().push_back(0);
+            }
+            return std::move(blocks);
         }
-    }
+    };
 
+    Splitter splitter(info.count_data_bits);
+    splitter.Feed(data);
+    auto blocks = splitter.Finish(info.count_data_bytes);
+
+    std::vector<char> result;
+    for (auto& block : blocks) {
+        auto encoded = EncodeBlock(block, info);
+        result.insert(result.end(), encoded.begin(), encoded.end());
+    }
     return result;
 }
 
 std::vector<char> managefile::Hamarc::EncodeHat(Hat hat) const {
-    std::vector<char> size_file = IntegralToVectorCHar(hat.size_file, 8);
-    std::vector<char> encoded_size_file = EncodeData(size_file, config.size_file);
+    auto enc = [&](const std::vector<char>& raw, const EncodingInfo& cfg) {
+        return EncodeData(std::span<char>(const_cast<char*>(raw.data()), raw.size()), cfg);
+    };
 
-    std::vector<char> size_name_file = IntegralToVectorCHar(hat.size_name_file, 4);
-    std::vector<char> encoded_size_name_file = EncodeData(size_name_file, config.size_name_file);
+    auto sf  = enc(IntegralToVectorChar(hat.size_file, 8),      config_.size_file);
+    auto snf = enc(IntegralToVectorChar(hat.size_name_file, 4),  config_.size_name_file);
 
-    std::vector<char> name_file(hat.size_name_file);
-    for (size_t index = 0; index < name_file.size(); index++) {
-        name_file[index] = hat.name_file[index];
-    }
-    std::vector<char> encoded_name_file = EncodeData(name_file, config.name_file);
+    std::vector<char> name_vec(hat.name_file.begin(), hat.name_file.end());
+    auto nf  = enc(name_vec, config_.name_file);
 
-    std::vector<char> encoding_data_file = IntegralToVectorCHar(hat.encoding_data_file, 8);
-    std::vector<char> encoded_encoding_data_file = EncodeData(encoding_data_file, config.encoding_data_file);
+    auto edf = enc(IntegralToVectorChar(hat.encoding_data_file, 8), config_.encoding_data_file);
 
     std::vector<char> result;
-
-    for (size_t index = 0; index < encoded_size_file.size(); index++) {
-        result.push_back(encoded_size_file[index]);
-    }
-    for (size_t index = 0; index < encoded_size_name_file.size(); index++) {
-        result.push_back(encoded_size_name_file[index]);
-    }
-    for (size_t index = 0; index < encoded_name_file.size(); index++) {
-        result.push_back(encoded_name_file[index]);
-    }
-    for (size_t index = 0; index < encoded_encoding_data_file.size(); index++) {
-        result.push_back(encoded_encoding_data_file[index]);
-    }
-
+    result.insert(result.end(), sf.begin(),  sf.end());
+    result.insert(result.end(), snf.begin(), snf.end());
+    result.insert(result.end(), nf.begin(),  nf.end());
+    result.insert(result.end(), edf.begin(), edf.end());
     return result;
 }
 
-managefile::File managefile::Hamarc::EncodeFile(File& file, const EncodingInfo& encoding_data, size_t buff_size) const {
-    File tmp_file = file.CreateTempFile();
-
-    auto lambda_gcd = [](long long a, long long b) {
-        while (b) {
-            long long c = b;
-            b = a % b;
-            a = c;
-        }
-        return a;
-    };
-    auto lambda_lcm = [&lambda_gcd](long long a, long long b) { return a / lambda_gcd(a, b) * b; };
+managefile::File managefile::Hamarc::EncodeFile(File& src_file, const EncodingInfo& enc_info,
+                                                  size_t buff_size) const {
+    File tmp = File::CreateTempFile();
 
     Hat hat;
-    hat.size_file = file.Length();
-    hat.size_name_file = file.Name().size() + file.Format().size() + 1;
-    hat.name_file = file.Name() + "." + file.Format();
-    hat.encoding_data_file = encoding_data.ToInt();
+    hat.size_file      = src_file.Length();
+    hat.size_name_file = static_cast<uint32_t>(src_file.Name().size() + src_file.Format().size() + 1);
+    hat.name_file      = src_file.Name() + "." + src_file.Format();
+    hat.encoding_data_file = enc_info.ToInt();
 
-    std::vector<char> hat_data = EncodeHat(hat);
-    tmp_file.Write(hat_data);
+    auto hat_data = EncodeHat(hat);
+    tmp.Write(hat_data);
 
-    buff_size = lambda_lcm(buff_size, 8);
-    size_t count_buff = file.Length() / buff_size;
+    // Align buffer to a multiple of 8 bits for clean block splitting
+    auto gcd = [](size_t a, size_t b) -> size_t {
+        while (b) { size_t t = b; b = a % b; a = t; }
+        return a;
+    };
+    auto lcm = [&gcd](size_t a, size_t b) -> size_t {
+        return a / gcd(a, b) * b;
+    };
+    buff_size = lcm(buff_size, 8);
 
-    file.SetPos(0);
-    for (size_t index = 0; index < count_buff; index++) {
-        std::vector<char> buff;
-        buff = file.Read(buff_size);
-
-        std::vector<char> encoded_data = EncodeData(buff, encoding_data);
-        tmp_file.Write(encoded_data);
+    src_file.SetBegin();
+    while (!src_file.IsEOF()) {
+        auto chunk = src_file.Read(buff_size);
+        if (chunk.empty()) break;
+        auto encoded = EncodeData(chunk, enc_info);
+        tmp.Write(encoded);
     }
-    if (file.Length() % buff_size != 0) {
-        std::vector<char> buff;
-        buff = file.Read(buff_size);
 
-        std::vector<char> encoded_data = EncodeData(buff, encoding_data);
-        tmp_file.Write(encoded_data);
-    }
-
-    return tmp_file;
+    return tmp;
 }
 
-std::vector<char> managefile::Hamarc::DecodeBlock(const std::span<char> block,
-                                                  const EncodingInfo& encoding_info) const {
-    std::vector<char> data(encoding_info.count_data_bytes);
-    std::vector<uint8_t> hemming_bytes1;
+// ---------------------------------------------------------------------------
+// Decode helpers
+// ---------------------------------------------------------------------------
 
-    for (size_t index = 0; index < data.size(); index++) {
-        data[index] = block[index];
+std::vector<char> managefile::Hamarc::DecodeBlock(std::span<char> block,
+                                                    const EncodingInfo& info) const {
+    std::vector<char> data(info.count_data_bytes);
+    for (size_t i = 0; i < data.size(); ++i) {
+        data[i] = block[i];
     }
-    size_t index_hemming_bit1 = 0;
-    if (encoding_info.count_data_bits % 8 != 0) {
-        data[data.size() - 1] = 0;
-        for (size_t index_bit = 0; index_bit < encoding_info.count_data_bits % 8; index_bit++) {
-            data[data.size() - 1] |= block[data.size() - 1] & (1 << index_bit);
+
+    // Extract Hamming bits from packed position
+    std::vector<uint8_t> hbytes_stored;
+    size_t ih = 0;
+
+    if (info.count_data_bits % 8 != 0) {
+        // Zero out the hamming bits in the last data byte
+        data.back() = 0;
+        for (size_t bit = 0; bit < info.count_data_bits % 8; ++bit) {
+            data.back() = static_cast<char>(
+                static_cast<uint8_t>(data.back()) | (static_cast<uint8_t>(block[data.size()-1]) & (1 << bit)));
         }
 
-        hemming_bytes1.push_back(0);
-        for (size_t index_bit = encoding_info.count_data_bits % 8;
-             index_bit < 8 && index_hemming_bit1 < encoding_info.count_hemming_bits;
-             index_bit++, index_hemming_bit1++) {
-            size_t bit = block[data.size() - 1] & (1 << index_bit);
-            size_t shift = index_bit - index_hemming_bit1;
-            hemming_bytes1.back() |= bit >> shift;
+        hbytes_stored.push_back(0);
+        for (size_t bit = info.count_data_bits % 8;
+             bit < 8 && ih < info.count_hemming_bits; ++bit, ++ih) {
+            uint8_t hbit = (static_cast<uint8_t>(block[data.size()-1]) >> bit) & 1;
+            hbytes_stored.back() = static_cast<uint8_t>(hbytes_stored.back()) | static_cast<uint8_t>(hbit << ih);
         }
     }
-    for (size_t index = data.size(); index < block.size(); index++) {
-        for (size_t index_bit = 0; index_bit < 8 && index_hemming_bit1 < encoding_info.count_hemming_bits;
-             index_bit++, index_hemming_bit1++) {
-            size_t bit = block[index] & (1 << index_bit);
 
-            if (hemming_bytes1.size() * 8 <= index_hemming_bit1) {
-                hemming_bytes1.push_back(0);
+    for (size_t i = data.size(); i < block.size() && ih < info.count_hemming_bits; ++i) {
+        for (size_t bit = 0; bit < 8 && ih < info.count_hemming_bits; ++bit, ++ih) {
+            if (hbytes_stored.size() * 8 <= ih) {
+                hbytes_stored.push_back(0);
             }
-
-            if (index_hemming_bit1 % 8 > index_bit) {
-                size_t shift = (index_hemming_bit1 % 8) - index_bit;
-                hemming_bytes1.back() |= bit << shift;
-            } else {
-                size_t shift = index_bit - (index_hemming_bit1 % 8);
-                hemming_bytes1.back() |= bit >> shift;
-            }
+            uint8_t hbit = (static_cast<uint8_t>(block[i]) >> bit) & 1;
+            hbytes_stored.back() = static_cast<uint8_t>(hbytes_stored.back()) | static_cast<uint8_t>(hbit << (ih % 8));
         }
     }
 
-    std::vector<uint8_t> hemming_bytes2 = HemmingBytes(data, encoding_info);
+    std::vector<uint8_t> hbytes_computed = HemmingBytes(data, info);
 
-    uint64_t pos = 0;
+    // Syndrome
+    uint64_t syndrome = 0;
     uint32_t cnt_diff = 0;
-    for (size_t index_byte = 0; index_byte < hemming_bytes1.size(); index_byte++) {
-        if (hemming_bytes1[index_byte] != hemming_bytes2[index_byte]) {
-            uint8_t diff = hemming_bytes1[index_byte] ^ hemming_bytes2[index_byte];
-
-            for (size_t index_bit = 0; index_bit < 8; index_bit++) {
-                if (diff & (1 << index_bit)) {
-                    ++cnt_diff;
-                    pos ^= 1LL << (index_byte * 8 + index_bit);
-                }
+    for (size_t ib = 0; ib < std::max(hbytes_stored.size(), hbytes_computed.size()); ++ib) {
+        uint8_t s = (ib < hbytes_stored.size()   ? hbytes_stored[ib]   : 0)
+                  ^ (ib < hbytes_computed.size() ? hbytes_computed[ib] : 0);
+        for (size_t bit = 0; bit < 8; ++bit) {
+            if (s & (1 << bit)) {
+                ++cnt_diff;
+                syndrome ^= 1ULL << (ib * 8 + bit);
             }
         }
     }
 
-    if (cnt_diff > 1) {
+    // Single-bit error correction
+    if (cnt_diff > 1 && syndrome > 0) {
+        // syndrome is 1-indexed position in the Hamming code
+        // Convert to data bit position
         size_t p = 0;
-        while (pos >= (1LL << (p + 1))) {
-            ++p;
+        size_t pos = syndrome;
+        // count how many powers-of-2 are <= pos
+        size_t data_pos = pos;
+        for (size_t pw = 0; (1ULL << pw) <= pos; ++pw) {
+            if (pos & (1ULL << pw)) {
+                // it's a parity bit position, skip
+            } else {
+                --data_pos;
+            }
         }
-        pos -= p + 1;
-        --pos;
-
-        size_t num_byte = pos / 8;
-        size_t ost = pos % 8;
-        data[num_byte] ^= 1 << ost;
+        // data_pos is now 1-indexed data bit
+        --data_pos;
+        size_t byte_idx = data_pos / 8;
+        size_t bit_idx  = data_pos % 8;
+        if (byte_idx < data.size()) {
+            data[byte_idx] = static_cast<char>(
+                static_cast<uint8_t>(data[byte_idx]) ^ static_cast<uint8_t>(1 << bit_idx));
+        }
     }
 
     return data;
 }
 
-std::vector<char> managefile::Hamarc::DecodeData(std::span<char> data, const EncodingInfo& encoding_info) {
-    size_t size_block =
-        (encoding_info.count_data_bytes + encoding_info.count_additional_bytes) * encoding_info.count_copy;
+std::vector<char> managefile::Hamarc::DecodeData(std::span<char> data,
+                                                   const EncodingInfo& info) {
+    size_t size_copy  = info.count_data_bytes + info.count_additional_bytes;
+    size_t size_block = size_copy * info.count_copy;
+    if (size_block == 0) return {};
+
     size_t count_block = data.size() / size_block;
+    std::vector<char> result;
 
-    std::vector<char> result_data;
-
-    for (size_t index_block = 0; index_block < count_block; index_block++) {
-        size_t size_copy = encoding_info.count_data_bytes + encoding_info.count_additional_bytes;
-
-        std::vector<std::vector<char>> copies(encoding_info.count_copy);
-        for (size_t index_copy = 0; index_copy < encoding_info.count_copy; index_copy++) {
-            std::span<char> encode_data = data.subspan(index_block * size_block + index_copy * size_copy, size_copy);
-
-            copies[index_copy] = DecodeBlock(encode_data, encoding_info);
+    for (size_t ib = 0; ib < count_block; ++ib) {
+        std::vector<std::vector<char>> copies(info.count_copy);
+        for (size_t ic = 0; ic < info.count_copy; ++ic) {
+            auto sub = data.subspan(ib * size_block + ic * size_copy, size_copy);
+            copies[ic] = DecodeBlock(sub, info);
         }
 
-        std::vector<char> current_data(encoding_info.count_data_bytes);
+        std::vector<char> chosen(info.count_data_bytes);
+        if (copies.size() == 1) {
+            chosen = copies[0];
+        } else {
+            // Majority vote per byte
+            for (size_t i = 0; i < info.count_data_bytes; ++i) {
+                std::vector<char> votes;
+                votes.reserve(copies.size());
+                for (auto& c : copies) votes.push_back(c[i]);
+                std::sort(votes.begin(), votes.end());
 
-        if (copies.size() > 1) {
-            for (size_t index = 0; index < current_data.size(); index++) {
-                std::vector<char> mas_let;
-                for (size_t index_copy = 0; index_copy < copies.size(); index_copy++) {
-                    mas_let.push_back(copies[index_copy][index]);
-                }
-
-                std::sort(mas_let.begin(), mas_let.end());
-
-                char result_let = mas_let[0];
-                int result_count_let = 1;
-                int current_count_let = 1;
-                for (size_t index_let = 1; index_let < mas_let.size(); index_let++) {
-                    if (mas_let[index_let] != mas_let[index_let - 1]) {
-                        if (current_count_let > result_count_let) {
-                            result_let = mas_let[index_let - 1];
-                            result_count_let = current_count_let;
-                        }
-
-                        current_count_let = 1;
+                char best = votes[0];
+                int  best_cnt = 1, cur_cnt = 1;
+                for (size_t k = 1; k < votes.size(); ++k) {
+                    if (votes[k] == votes[k-1]) {
+                        ++cur_cnt;
                     } else {
-                        ++current_count_let;
+                        cur_cnt = 1;
+                    }
+                    if (cur_cnt > best_cnt) {
+                        best_cnt = cur_cnt;
+                        best = votes[k];
                     }
                 }
-
-                if (current_count_let > result_count_let) {
-                    result_let = mas_let[mas_let.size() - 1];
-                    result_count_let = current_count_let;
-                }
-
-                current_data[index] = result_let;
+                chosen[i] = best;
             }
-        } else {
-            current_data = copies[0];
         }
 
-        for (size_t index_current_data = 0; index_current_data < current_data.size(); index_current_data++) {
-            result_data.push_back(current_data[index_current_data]);
-        }
+        result.insert(result.end(), chosen.begin(), chosen.end());
     }
 
-    return result_data;
+    return result;
 }
 
-std::vector<char> managefile::Hamarc::DecodePosBlock(size_t pos, const EncodingInfo& encoding_info) {
-    file.SetPos(pos);
-    size_t size_block =
-        (encoding_info.count_data_bytes + encoding_info.count_additional_bytes) * encoding_info.count_copy;
-    std::vector<char> encoded_data = file.Read(size_block);
-
-    std::vector<char> decoded_data = DecodeData(encoded_data, encoding_info);
-
-    return encoded_data;
-}
-
-managefile::Hamarc::Hat managefile::Hamarc::DecodeHat(const size_t pos) {
+managefile::Hamarc::Hat managefile::Hamarc::DecodeHat(size_t pos) {
     file.SetPos(pos);
 
-    std::vector<char> size_file;
-    std::vector<char> size_name_file;
-    std::vector<char> name_file;
-    std::vector<char> encoding_data_file;
+    auto read_field = [&](size_t count_bytes, const EncodingInfo& cfg) {
+        size_t encoded_bytes = count_bytes *
+            (cfg.count_data_bytes + cfg.count_additional_bytes) * cfg.count_copy;
+        auto raw = file.Read(encoded_bytes);
+        return DecodeData(raw, cfg);
+    };
 
-    std::vector<char> encoded_size_file =
-        file.Read(8 * (config.size_file.count_data_bytes + config.size_file.count_additional_bytes));
-    size_file = DecodeData(encoded_size_file, config.size_file);
+    auto sf   = read_field(8, config_.size_file);
+    auto snf_raw = read_field(4, config_.size_name_file);
 
-    std::vector<char> encoded_size_name_file =
-        file.Read(4 * (config.size_name_file.count_data_bytes + config.size_name_file.count_additional_bytes));
-    size_name_file = DecodeData(encoded_size_name_file, config.size_name_file);
-    uint32_t usize_name = 0;
-    usize_name += static_cast<uint32_t>(size_name_file[0]) << 24;
-    usize_name += static_cast<uint32_t>(size_name_file[1]) << 16;
-    usize_name += static_cast<uint32_t>(size_name_file[2]) << 8;
-    usize_name += static_cast<uint32_t>(size_name_file[3]) << 0;
+    uint32_t name_len = SpanToUint32(snf_raw);
 
-    std::vector<char> encoded_name_file =
-        file.Read(usize_name * (config.name_file.count_data_bytes + config.name_file.count_additional_bytes));
-    name_file = DecodeData(encoded_name_file, config.name_file);
+    // encoded name
+    size_t enc_name_bytes = name_len *
+        (config_.name_file.count_data_bytes + config_.name_file.count_additional_bytes) * config_.name_file.count_copy;
+    auto enc_name = file.Read(enc_name_bytes);
+    auto nf = DecodeData(enc_name, config_.name_file);
 
-    std::vector<char> encoded_encoding_data_file =
-        file.Read(8 * (config.encoding_data_file.count_data_bytes + config.encoding_data_file.count_additional_bytes));
-    encoding_data_file = DecodeData(encoded_encoding_data_file, config.encoding_data_file);
+    auto edf = read_field(8, config_.encoding_data_file);
 
-    Hat result_hat(size_file, size_name_file, name_file, encoding_data_file);
-
-    return result_hat;
+    return Hat(sf, snf_raw, nf, edf);
 }
 
 managefile::File managefile::Hamarc::DecodeFile(size_t pos, const Hat& hat, size_t buff_size) {
-    File tmp_file = File::CreateTempFile();
+    File tmp = File::CreateTempFile();
     file.SetPos(pos);
 
-    EncodingInfo encoding_data(hat.encoding_data_file >> 8, (hat.encoding_data_file << 56) >> 56);
+    EncodingInfo enc(hat.encoding_data_file >> 8,
+                     static_cast<uint32_t>((hat.encoding_data_file) & 0xFF));
 
-    size_t size_block =
-        (encoding_data.count_data_bytes + encoding_data.count_additional_bytes) * encoding_data.count_copy;
+    size_t size_block = (enc.count_data_bytes + enc.count_additional_bytes) * enc.count_copy;
+    if (size_block == 0) return tmp;
 
-    buff_size = buff_size / size_block * size_block;
-    size_t size_file = GetSizeFile(hat);
-    size_t count_reading = size_file / buff_size;
+    // Align buffer to block boundary
+    buff_size = (buff_size / size_block) * size_block;
+    if (buff_size == 0) buff_size = size_block;
 
-    for (size_t index_reading = 0; index_reading < count_reading; index_reading++) {
-        std::vector<char> buff;
-        buff = file.Read(buff_size);
-        std::vector<char> decoded_buff = DecodeData(buff, encoding_data);
+    size_t encoded_size = GetSizeFile(hat);
+    size_t bytes_read = 0;
+    size_t total_data_bytes = 0; // track decoded bytes to trim at end
 
-        tmp_file.PushBack(decoded_buff);
+    while (bytes_read < encoded_size) {
+        size_t to_read = std::min(buff_size, encoded_size - bytes_read);
+        auto chunk = file.Read(to_read);
+        bytes_read += chunk.size();
+
+        auto decoded = DecodeData(chunk, enc);
+        tmp.PushBack(decoded);
+        total_data_bytes += decoded.size();
     }
 
-    size_t ost_bytes = count_reading * buff_size;
-    ost_bytes = size_file - ost_bytes;
+    // Trim to original file size
+    if (total_data_bytes > hat.size_file) {
+        tmp.PopBack(total_data_bytes - hat.size_file);
+    }
 
-    std::vector<char> buff;
-    buff = file.Read(ost_bytes);
-    std::vector<char> decoded_buff = DecodeData(buff, encoding_data);
-
-    size_t ost_byte = (ost_bytes / size_block - 1) * encoding_data.count_data_bytes +
-                      (hat.size_file % encoding_data.count_data_bytes);
-    decoded_buff.resize(ost_byte);
-
-    tmp_file.PushBack(decoded_buff);
-
-    return std::move(tmp_file);
+    tmp.SetBegin();
+    return tmp;
 }
 
 size_t managefile::Hamarc::GetSizeFile(const Hat& hat) const {
-    EncodingInfo encoding_data(hat.encoding_data_file >> 8, (hat.encoding_data_file << 56) >> 56);
+    EncodingInfo enc(hat.encoding_data_file >> 8,
+                     static_cast<uint32_t>((hat.encoding_data_file) & 0xFF));
 
-    size_t size_block =
-        (encoding_data.count_data_bytes + encoding_data.count_additional_bytes) * encoding_data.count_copy;
-    size_t count_block = (hat.size_file * 8) / encoding_data.count_data_bits;
-    if ((hat.size_file * 8) % encoding_data.count_data_bits != 0) {
+    size_t size_block = (enc.count_data_bytes + enc.count_additional_bytes) * enc.count_copy;
+    size_t count_block = (hat.size_file * 8) / enc.count_data_bits;
+    if ((hat.size_file * 8) % enc.count_data_bits != 0) {
         ++count_block;
     }
-
-    size_t size_file = size_block * count_block;
-
-    return size_file;
+    return size_block * count_block;
 }
 
-size_t managefile::Hamarc::GetPosFirstFile() { return begin_file_pos; }
+size_t managefile::Hamarc::GetPosFirstFile() const {
+    return begin_file_pos_;
+}
 
-managefile::Hamarc::Hamarc(const std::string& file_path, bool create_if_not_exist, const ConfigEncodingFile& config) {
+// ---------------------------------------------------------------------------
+// Hamarc constructor
+// ---------------------------------------------------------------------------
+
+managefile::Hamarc::Hamarc(const std::string& file_path, bool create_if_not_exist,
+                             const ConfigEncodingFile& config)
+    : count_file_(0), begin_file_pos_(0) {
     if (std::filesystem::exists(file_path) && std::filesystem::file_size(file_path) > 0) {
         file = File(file_path, create_if_not_exist);
 
-        std::vector<std::vector<char>> copies(count_copy_hat_archive);
-        std::vector<char> config_archive(32);
+        // Read config with majority vote across kCountCopyHatArchive copies
+        std::vector<std::vector<char>> copies(kCountCopyHatArchive);
         file.SetBegin();
-        for (size_t index_copy = 0; index_copy < copies.size(); index_copy++) {
-            copies[index_copy] = file.Read(32);
+        for (auto& c : copies) {
+            c = file.Read(32);
         }
 
-        if (copies.size() > 1) {
-            for (size_t index = 0; index < config_archive.size(); index++) {
-                std::vector<char> mas_let;
-                for (size_t index_copy = 0; index_copy < copies.size(); index_copy++) {
-                    mas_let.push_back(copies[index_copy][index]);
-                }
-
-                std::sort(mas_let.begin(), mas_let.end());
-
-                char result_let = mas_let[0];
-                int result_count_let = 1;
-                int current_count_let = 1;
-                for (size_t index_let = 1; index_let < mas_let.size(); index_let++) {
-                    if (mas_let[index_let] != mas_let[index_let - 1]) {
-                        if (current_count_let > result_count_let) {
-                            result_let = mas_let[index_let - 1];
-                            result_count_let = current_count_let;
-                        }
-
-                        current_count_let = 1;
-                    } else {
-                        ++current_count_let;
-                    }
-                }
-
-                if (current_count_let > result_count_let) {
-                    result_let = mas_let[mas_let.size() - 1];
-                    result_count_let = current_count_let;
-                }
-
-                config_archive[index] = result_let;
+        std::vector<char> config_bytes(32);
+        for (size_t i = 0; i < 32; ++i) {
+            std::vector<char> votes;
+            for (auto& c : copies) if (i < c.size()) votes.push_back(c[i]);
+            std::sort(votes.begin(), votes.end());
+            char best = votes[0]; int best_cnt = 1, cur = 1;
+            for (size_t k = 1; k < votes.size(); ++k) {
+                cur = (votes[k] == votes[k-1]) ? cur + 1 : 1;
+                if (cur > best_cnt) { best_cnt = cur; best = votes[k]; }
             }
-        } else {
-            config_archive = copies[0];
+            config_bytes[i] = best;
         }
 
-        this->config = ConfigEncodingFile(config_archive);
-        begin_file_pos = file.Pos();
+        config_ = ConfigEncodingFile(std::span<char>(config_bytes));
+        begin_file_pos_ = static_cast<size_t>(file.Pos());
 
-        count_file = 0;
-        size_t current_pos = begin_file_pos;
-        size_t file_length = file.Length();
-        while (current_pos < file_length) {
-            Hat hat = DecodeHat(file.Pos());
-            count_file++;
-            size_t move_pos = GetSizeFile(hat);
-            file.MovePos(move_pos);
-            current_pos = file.Pos();
+        // Count files
+        size_t cur_pos = begin_file_pos_;
+        size_t file_len = file.Length();
+        while (cur_pos < file_len) {
+            Hat hat = DecodeHat(cur_pos);
+            ++count_file_;
+            size_t sz = GetSizeFile(hat);
+            file.MovePos(static_cast<ssize_t>(sz));
+            cur_pos = static_cast<size_t>(file.Pos());
         }
     } else {
         file = File(file_path, create_if_not_exist);
-        this->config = config;
-        count_file = 0;
+        config_ = config;
+        count_file_ = 0;
 
-        std::vector<char> config_archive;
+        // Write config × kCountCopyHatArchive
+        auto append_int = [&](long long v, size_t n) {
+            auto bytes = IntegralToVectorChar(v, n);
+            return bytes;
+        };
 
-        config_archive = IntegralToVectorCHar(config.size_file.ToInt(), 8);
-        std::vector<char> current = IntegralToVectorCHar(config.size_name_file.ToInt(), 8);
-        for (size_t index = 0; index < current.size(); index++) {
-            config_archive.push_back(current[index]);
-        }
-        current = IntegralToVectorCHar(config.name_file.ToInt(), 8);
-        for (size_t index = 0; index < current.size(); index++) {
-            config_archive.push_back(current[index]);
-        }
-        current = IntegralToVectorCHar(config.encoding_data_file.ToInt(), 8);
-        for (size_t index = 0; index < current.size(); index++) {
-            config_archive.push_back(current[index]);
-        }
+        std::vector<char> config_bytes;
+        auto push = [&](const std::vector<char>& v) {
+            config_bytes.insert(config_bytes.end(), v.begin(), v.end());
+        };
+        push(append_int(config.size_file.ToInt(),          8));
+        push(append_int(config.size_name_file.ToInt(),     8));
+        push(append_int(config.name_file.ToInt(),          8));
+        push(append_int(config.encoding_data_file.ToInt(), 8));
 
-        for (size_t index_copy = 0; index_copy < count_copy_hat_archive; index_copy++) {
-            file.PushBack(config_archive);
+        for (size_t i = 0; i < kCountCopyHatArchive; ++i) {
+            file.PushBack(config_bytes);
         }
-        begin_file_pos = file.Pos();
+        begin_file_pos_ = static_cast<size_t>(file.Pos());
     }
 }
 
-managefile::Hamarc::ConfigEncodingFile managefile::Hamarc::GetConfig() { return config; }
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+managefile::Hamarc::ConfigEncodingFile managefile::Hamarc::GetConfig() const {
+    return config_;
+}
 
 std::pair<managefile::File, bool> managefile::Hamarc::Get(const std::string& name) {
-    File tmp_file;
-
     file.SetPos(GetPosFirstFile());
-    for (size_t index_file = 0; index_file < Length(); index_file++) {
-        Hat hat = DecodeHat(file.Pos());
+    for (size_t i = 0; i < count_file_; ++i) {
+        size_t hat_pos = static_cast<size_t>(file.Pos());
+        Hat hat = DecodeHat(hat_pos);
         if (hat.name_file == name) {
-            tmp_file = DecodeFile(file.Pos(), hat);
-
-            return {std::move(tmp_file), true};
+            File extracted = DecodeFile(static_cast<size_t>(file.Pos()), hat);
+            return {std::move(extracted), true};
         }
-
-        size_t size_file = GetSizeFile(hat);
-
-        file.MovePos(size_file);
+        file.MovePos(static_cast<ssize_t>(GetSizeFile(hat)));
     }
-
-    tmp_file.SetBegin();
-    return {std::move(tmp_file), false};
+    return {File{}, false};
 }
 
 ssize_t managefile::Hamarc::GetPos(const std::string& name) {
     file.SetPos(GetPosFirstFile());
-    for (size_t index_file = 0; index_file < Length(); index_file++) {
-        size_t start_file_pos = file.Pos();
-        Hat hat = DecodeHat(file.Pos());
+    for (size_t i = 0; i < count_file_; ++i) {
+        size_t hat_start = static_cast<size_t>(file.Pos());
+        Hat hat = DecodeHat(hat_start);
         if (hat.name_file == name) {
-            return start_file_pos;
+            return static_cast<ssize_t>(hat_start);
         }
-
-        size_t size_file = GetSizeFile(hat);
-
-        file.MovePos(size_file);
+        file.MovePos(static_cast<ssize_t>(GetSizeFile(hat)));
     }
-
     return -1;
 }
 
-void managefile::Hamarc::Add(File& file) {
-    EncodingInfo encoding_info(256, 1);
-    Add(file, encoding_info);
+void managefile::Hamarc::Add(File& f) {
+    EncodingInfo default_enc(256, 1);
+    Add(f, default_enc);
 }
 
-void managefile::Hamarc::Add(File& file, const EncodingInfo& encoding_info) {
-    File tmp_file = EncodeFile(file, encoding_info);
-    this->file.PushBack(tmp_file);
-    ++count_file;
+void managefile::Hamarc::Add(File& f, const EncodingInfo& enc_info) {
+    File tmp = EncodeFile(f, enc_info);
+    file.PushBack(tmp);
+    ++count_file_;
 }
 
 void managefile::Hamarc::Delete(const std::string& name) {
-    ssize_t start_pos = GetPos(name);
-
-    if (start_pos != -1) {
-        --count_file;
-        file.SetPos(start_pos);
-
-        Hat hat = DecodeHat(start_pos);
-        size_t size_file = GetSizeFile(hat);
-
-        size_t current_pos = file.Pos();
-        size_t size_delete = current_pos - start_pos + size_file;
-        file.Erase(start_pos, size_delete);
+    ssize_t start = GetPos(name);
+    if (start == -1) {
+        std::cerr << "hamarc: file not found in archive: " << name << "\n";
+        return;
     }
+
+    size_t start_pos = static_cast<size_t>(start);
+    Hat hat = DecodeHat(start_pos);
+    size_t after_hat = static_cast<size_t>(file.Pos());
+    size_t size_data = GetSizeFile(hat);
+    size_t total_delete = (after_hat - start_pos) + size_data;
+
+    file.Erase(start_pos, total_delete);
+    --count_file_;
 }
 
-size_t managefile::Hamarc::Length() const { return count_file; }
+size_t managefile::Hamarc::Length() const {
+    return count_file_;
+}
 
 std::vector<std::pair<std::string, size_t>> managefile::Hamarc::Info() {
     file.SetPos(GetPosFirstFile());
-
     std::vector<std::pair<std::string, size_t>> result;
-    for (size_t index_file = 0; index_file < Length(); index_file++) {
-        Hat hat = DecodeHat(file.Pos());
-        result.push_back({hat.name_file, hat.size_file});
-
-        size_t size_file = GetSizeFile(hat);
-        file.MovePos(size_file);
+    for (size_t i = 0; i < count_file_; ++i) {
+        Hat hat = DecodeHat(static_cast<size_t>(file.Pos()));
+        result.emplace_back(hat.name_file, hat.size_file);
+        file.MovePos(static_cast<ssize_t>(GetSizeFile(hat)));
     }
-
     return result;
 }
 
 std::vector<managefile::File> managefile::Hamarc::GetAll() {
     file.SetPos(GetPosFirstFile());
-    std::vector<File> result(Length());
-    for (size_t index_file = 0; index_file < Length(); index_file++) {
-        Hat hat = DecodeHat(file.Pos());
-        size_t cu_pos = file.Pos();
-        File file = std::move(DecodeFile(cu_pos, hat));
-        File result_file(hat.name_file, true, true, true);
-        result_file.PushBack(file);
-        result_file.SetBegin();
-        result[index_file] = std::move(result_file);
+    std::vector<File> result;
+    result.reserve(count_file_);
+
+    for (size_t i = 0; i < count_file_; ++i) {
+        size_t hat_pos = static_cast<size_t>(file.Pos());
+        Hat hat = DecodeHat(hat_pos);
+        size_t data_pos = static_cast<size_t>(file.Pos());
+
+        File decoded = DecodeFile(data_pos, hat);
+
+        File out(hat.name_file, true, false, true);
+        out.PushBack(decoded);
+        out.SetBegin();
+        result.push_back(std::move(out));
+
+        file.SetPos(hat_pos);
+        Hat hat2 = DecodeHat(hat_pos);
+        file.MovePos(static_cast<ssize_t>(GetSizeFile(hat2)));
     }
 
     return result;
 }
 
-void managefile::Hamarc::Merge(Hamarc& other) {
-    std::vector<File> files = other.GetAll();
-    for (size_t index = 0; index < files.size(); index++) {
-        Add(files[index]);
+bool managefile::Hamarc::Merge(Hamarc& other) {
+    if (!(GetConfig() == other.GetConfig())) {
+        std::cerr << "hamarc: cannot merge archives with different encoding configs\n";
+        return false;
     }
+    auto files = other.GetAll();
+    for (auto& f : files) {
+        f.UnMakeTemp();
+        Add(f);
+    }
+    return true;
 }

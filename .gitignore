@@ -1,51 +1,38 @@
-# Prerequisites
-*.d
+# Объектные файлы
+*.d *.slo *.lo *.o *.obj
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+# Прекомпилированные заголовки
+*.gch *.pch
 
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
+# Линкер
 *.ilk
 
-# Debugger Files
+# Отладчик
 *.pdb
 
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
+# Динамические библиотеки
+*.so *.dylib *.dll
 
-# Fortran module files
-*.mod
-*.smod
+# Статические библиотеки
+*.lai *.la *.a *.lib
 
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
+# Исполняемые файлы
+*.exe *.out *.app
 
-# Executables
-*.exe
-*.out
-*.app
-
-# debug information files
+# Отладочная информация
 *.dwo
 
-.vscode
-build
-src/.vscode
-src/resources
-src/out
-src/here
-src/test
-src/manage_haf
-src/manage_file
+# Временные файлы архиватора
+*.tmp
+*.haf
+
+# Сборка
+build/
+
+# IDE
+.vscode/
+.idea/
+*.user
+
+# Репомикс
+repomix-output.xml
